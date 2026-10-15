@@ -8,7 +8,7 @@ import { FolderPicker, SymbolPicker, TemplatePicker } from './components/Pickers
 import { TodoPanel } from './components/TodoPanel'
 import { downloadBlob } from './lib/download'
 import { dueReminders, todayISO } from './lib/reminders'
-import { createSheet, templates } from './lib/sheet'
+import { createSheet } from './lib/sheet'
 import * as store from './lib/store'
 import type { Character, Scene, Sheet, StoreData, TemplateId } from './types'
 
@@ -35,8 +35,8 @@ export default function App() {
   const [view, setView] = useState<View>(initialNav.view)
   const [libraryCharacter, setLibraryCharacter] = useState<Character>('bambina')
 
-  /** Dove va la vignetta scelta in libreria: un riquadro (indice) o il premio della tabella a gettoni */
-  const [pickTarget, setPickTarget] = useState<number | 'reward' | null>(null)
+  /** Riquadro (indice) in cui va la vignetta scelta in libreria */
+  const [pickTarget, setPickTarget] = useState<number | null>(null)
   const [symbolIndex, setSymbolIndex] = useState<number | null>(null)
   const [folderAction, setFolderAction] = useState<FolderAction | null>(null)
   const [newSheetFolder, setNewSheetFolder] = useState<{ folderId: string | null } | null>(null)
@@ -120,11 +120,7 @@ export default function App() {
     navigate({ name: 'scheda' }, id === draft.id ? null : id)
   }
 
-  function placeScene(index: number | 'reward', scene: Scene) {
-    if (index === 'reward') {
-      updateCurrent({ reward: { ...sheet.reward, code: scene.code } })
-      return
-    }
+  function placeScene(index: number, scene: Scene) {
     updateCurrent({
       cells: sheet.cells.map((c, i) => (i === index ? { ...c, code: scene.code, text: null } : c)),
     })
@@ -354,7 +350,6 @@ export default function App() {
             folder={sheetFolder}
             onChange={updateCurrent}
             onChooseScene={setPickTarget}
-            onChooseReward={() => setPickTarget('reward')}
             onChooseSymbol={setSymbolIndex}
             onSave={() => setFolderAction({ mode: 'save' })}
             onOpenFolder={openFolder}
@@ -369,13 +364,7 @@ export default function App() {
 
       {pickTarget !== null && (
         <Modal
-          title={
-            pickTarget === 'reward'
-              ? 'Scegli la vignetta del premio'
-              : templates[sheet.template].kind === 'tokens'
-                ? `Scegli la vignetta per la riga ${pickTarget + 1}`
-                : `Scegli la vignetta per il riquadro ${pickTarget + 1}`
-          }
+          title={`Scegli la vignetta per il riquadro ${pickTarget + 1}`}
           onClose={closePicker}
         >
           <Library
@@ -392,6 +381,7 @@ export default function App() {
         <SymbolPicker
           index={symbolIndex}
           value={sheet.cells[symbolIndex].symbol}
+          doneCircle={sheet.doneCircle}
           onChange={(symbol) =>
             updateCurrent({ cells: sheet.cells.map((c, i) => (i === symbolIndex ? { ...c, symbol } : c)) })
           }

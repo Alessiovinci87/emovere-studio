@@ -4,11 +4,10 @@ import type { ReactElement } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import { PrintSheetView } from '../components/SheetView'
-import { CutoutPage } from '../components/TokenBoard'
+import { CutoutPage } from '../components/Stars'
 import type { Sheet } from '../types'
 import type { ImageVariant } from './catalog'
 import { downloadBlob } from './download'
-import { templates } from './sheet'
 
 export type ExportKind = 'stampa' | 'whatsapp'
 
@@ -30,21 +29,12 @@ const presets: Record<ExportKind, Preset> = {
 
 const CSS_DPI = 96
 
-type Orientation = 'portrait' | 'landscape'
-interface Page {
-  element: ReactElement
-  orientation: Orientation
-}
-
-/** Pagine del PDF: la scheda nel suo orientamento, poi (tabella a gettoni) le stelline in A4 verticale. */
-function pagesFor(sheet: Sheet, preset: Preset, content: ExportContent): Page[] {
-  const template = templates[sheet.template]
-  const stars: Page = { element: <CutoutPage title={sheet.title} />, orientation: 'portrait' }
+/** Pagine del PDF (A4 verticale): la scheda, poi le stelline da ritagliare se c'è il cerchietto e sono richieste. */
+function pagesFor(sheet: Sheet, preset: Preset, content: ExportContent): ReactElement[] {
+  const stars = <CutoutPage title={sheet.title} />
   if (content === 'stars') return [stars]
-  const pages: Page[] = [
-    { element: <PrintSheetView sheet={sheet} imageVariant={preset.images} />, orientation: template.orientation },
-  ]
-  if (template.kind === 'tokens' && sheet.cutouts) pages.push(stars)
+  const pages = [<PrintSheetView sheet={sheet} imageVariant={preset.images} />]
+  if (sheet.doneCircle && sheet.cutouts) pages.push(stars)
   return pages
 }
 
@@ -53,11 +43,11 @@ export async function exportPdf(sheet: Sheet, kind: ExportKind, content: ExportC
   const preset = presets[kind]
   const pages = pagesFor(sheet, preset, content)
   const canvases: HTMLCanvasElement[] = []
-  for (const page of pages) canvases.push(await renderPage(page.element, preset))
+  for (const page of pages) canvases.push(await renderPage(page, preset))
 
   let pdf: Blob | undefined
   for (const quality of preset.qualities) {
-    pdf = buildPdf(sheet, pages, canvases, quality)
+    pdf = buildPdf(sheet, canvases, quality)
     if (!preset.maxBytes || pdf.size <= preset.maxBytes) break
   }
   downloadBlob(pdf!, fileName(sheet, kind, content))
@@ -92,16 +82,15 @@ function fontCSS(node: HTMLElement): Promise<string> {
   return fontCSSCache
 }
 
-function buildPdf(sheet: Sheet, pages: Page[], canvases: HTMLCanvasElement[], jpegQuality: number | null): Blob {
-  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: pages[0].orientation, compress: true })
+function buildPdf(sheet: Sheet, canvases: HTMLCanvasElement[], jpegQuality: number | null): Blob {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true })
   doc.setProperties({ title: sheet.title || 'Scheda', creator: 'Emovere Studio' })
-  pages.forEach((page, i) => {
-    if (i > 0) doc.addPage('a4', page.orientation)
-    const [w, h] = page.orientation === 'landscape' ? [297, 210] : [210, 297]
+  canvases.forEach((canvas, i) => {
+    if (i > 0) doc.addPage('a4', 'portrait')
     if (jpegQuality === null) {
-      doc.addImage(canvases[i], 'PNG', 0, 0, w, h, undefined, 'FAST')
+      doc.addImage(canvas, 'PNG', 0, 0, 210, 297, undefined, 'FAST')
     } else {
-      doc.addImage(canvases[i].toDataURL('image/jpeg', jpegQuality), 'JPEG', 0, 0, w, h)
+      doc.addImage(canvas.toDataURL('image/jpeg', jpegQuality), 'JPEG', 0, 0, 210, 297)
     }
   })
   return doc.output('blob')

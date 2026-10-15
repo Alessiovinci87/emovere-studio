@@ -1,17 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ExportContent, ExportKind } from '../lib/exportPdf'
 import { changeTemplate, retitleForName, templateList, templates } from '../lib/sheet'
+import { CIRCLE, cutoutGrid } from '../lib/stars'
 import type { Folder, Sheet, TemplateId } from '../types'
 import { CharacterToggle } from './CharacterToggle'
 import { Modal } from './Modal'
 import { ReminderEditor } from './ReminderEditor'
 import { SheetView } from './SheetView'
 import { StatusPicker } from './Status'
-import { TokenControls } from './TokenControls'
 import { Button, Field, NameInput, NotesField, inputClass } from './ui'
 
 /** mm → pixel CSS (96 dpi) */
 const PX_PER_MM = 96 / 25.4
+/** A4 verticale */
+const PAGE_W = 210
+const PAGE_H = 297
 
 interface Props {
   sheet: Sheet
@@ -19,7 +22,6 @@ interface Props {
   onChange: (patch: Partial<Sheet>) => void
   onChooseScene: (index: number) => void
   onChooseSymbol: (index: number) => void
-  onChooseReward: () => void
   onSave: () => void
   onOpenFolder: (id: string) => void
   onNew: () => void
@@ -31,16 +33,11 @@ export function Composer({
   onChange,
   onChooseScene,
   onChooseSymbol,
-  onChooseReward,
   onSave,
   onOpenFolder,
   onNew,
 }: Props) {
-  const template = templates[sheet.template]
-  const isTokens = template.kind === 'tokens'
-  // A4 verticale o orizzontale (tabella a gettoni)
-  const [pageW, pageH] = template.orientation === 'landscape' ? [297, 210] : [210, 297]
-  const scale = useFitScale(pageW * PX_PER_MM)
+  const scale = useFitScale(PAGE_W * PX_PER_MM)
   const filled = sheet.cells.filter((c) => c.code).length
   const [exporting, setExporting] = useState<ExportKind | null>(null)
   const [askSave, setAskSave] = useState(false)
@@ -64,8 +61,7 @@ export function Composer({
   function handleTemplate(id: TemplateId) {
     const count = templates[id].cols * templates[id].rows
     const lost = sheet.cells.slice(count).filter((c) => c.code).length
-    const what = templates[id].kind === 'tokens' ? `${count} righe` : `${count} riquadri`
-    if (lost > 0 && !confirm(`Il nuovo modello ha ${what}: ${lost} vignette in fondo verranno tolte. Continuare?`))
+    if (lost > 0 && !confirm(`Il nuovo modello ha ${count} riquadri: ${lost} vignette in fondo verranno tolte. Continuare?`))
       return
     onChange(changeTemplate(sheet, id))
   }
@@ -106,9 +102,7 @@ export function Composer({
             ))}
           </select>
           <p className="text-sm text-muted">
-            {isTokens
-              ? `${sheet.cells.length} ${sheet.cells.length === 1 ? 'riga' : 'righe'} · A4 orizzontale`
-              : `${filled} di ${sheet.cells.length} riquadri pieni`}
+            {filled} di {sheet.cells.length} riquadri pieni
           </p>
         </Field>
 
@@ -128,29 +122,27 @@ export function Composer({
           )}
         </div>
 
-        {isTokens ? (
-          <TokenControls
-            sheet={sheet}
-            onChange={onChange}
-            exporting={exporting !== null}
-            onExportStars={(kind) => handleExport(kind, 'stars')}
+        <label className="flex cursor-pointer items-center justify-between gap-3">
+          <span className="font-bold">Riquadro “Ricordo sempre”</span>
+          <input
+            type="checkbox"
+            checked={sheet.remember.enabled}
+            onChange={(e) => onChange({ remember: { ...sheet.remember, enabled: e.target.checked } })}
+            className="h-5 w-5 accent-sky"
           />
-        ) : (
-          <label className="flex cursor-pointer items-center justify-between gap-3">
-            <span className="font-bold">Riquadro “Ricordo sempre”</span>
-            <input
-              type="checkbox"
-              checked={sheet.remember.enabled}
-              onChange={(e) => onChange({ remember: { ...sheet.remember, enabled: e.target.checked } })}
-              className="h-5 w-5 accent-sky"
-            />
-          </label>
-        )}
+        </label>
+
+        <StarControls
+          sheet={sheet}
+          onChange={onChange}
+          exporting={exporting !== null}
+          onExportStars={(kind) => handleExport(kind, 'stars')}
+        />
 
         <p className="text-sm leading-relaxed text-muted">
-          {isTokens
-            ? 'Clicca su una vignetta vuota per sceglierla. Su una vignetta piena passa sopra (o toccala, su tablet) per cambiarla, svuotarla o aggiungere un simbolo. Titoli dei compiti e premio si modificano sul foglio.'
-            : "Clicca su un riquadro vuoto per scegliere la vignetta. Su un riquadro pieno passa sopra (o toccalo, su tablet) per cambiarla, svuotarla o aggiungere un simbolo. Trascina i riquadri per cambiare l'ordine (su tablet: tieni premuto e trascina). Titolo, frasi e orari si modificano sul foglio."}
+          Clicca su un riquadro vuoto per scegliere la vignetta. Su un riquadro pieno passa sopra (o toccalo, su
+          tablet) per cambiarla, svuotarla o aggiungere un simbolo. Trascina i riquadri per cambiare l'ordine (su
+          tablet: tieni premuto e trascina). Titolo, frasi e orari si modificano sul foglio.
         </p>
 
         <Field label="Scarica">
@@ -178,7 +170,7 @@ export function Composer({
       <div ref={scale.ref} className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
         <div
           className="mx-auto overflow-hidden rounded-xl shadow-lg"
-          style={{ width: pageW * PX_PER_MM * scale.value, height: pageH * PX_PER_MM * scale.value }}
+          style={{ width: PAGE_W * PX_PER_MM * scale.value, height: PAGE_H * PX_PER_MM * scale.value }}
         >
           <div style={{ transform: `scale(${scale.value})`, transformOrigin: 'top left' }}>
             <SheetView
@@ -187,7 +179,6 @@ export function Composer({
               onChange={onChange}
               onChooseScene={onChooseScene}
               onChooseSymbol={onChooseSymbol}
-              onChooseReward={onChooseReward}
             />
           </div>
         </div>
@@ -231,6 +222,65 @@ export function Composer({
             </div>
           </div>
         </Modal>
+      )}
+    </div>
+  )
+}
+
+/** Cerchietto "fatto" con il velcro e stelline rotonde da ritagliare. */
+function StarControls({
+  sheet,
+  onChange,
+  exporting,
+  onExportStars,
+}: {
+  sheet: Sheet
+  onChange: (patch: Partial<Sheet>) => void
+  exporting: boolean
+  onExportStars: (kind: ExportKind) => void
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <label className="flex cursor-pointer items-center justify-between gap-3">
+        <span className="flex flex-col">
+          <span className="font-bold">Cerchietto per la stellina</span>
+          <span className="text-xs text-muted">
+            In alto a destra di ogni vignetta, {CIRCLE / 10} cm: col velcro ci si attacca la stellina “fatto”
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          checked={sheet.doneCircle}
+          onChange={(e) => onChange({ doneCircle: e.target.checked })}
+          className="h-5 w-5 shrink-0 accent-sky"
+        />
+      </label>
+      {sheet.doneCircle && (
+        <div className="flex flex-col gap-3 rounded-2xl bg-butter p-3">
+          <label className="flex cursor-pointer items-center justify-between gap-3">
+            <span className="text-sm font-bold">Aggiungi stelline da ritagliare al PDF</span>
+            <input
+              type="checkbox"
+              checked={sheet.cutouts}
+              onChange={(e) => onChange({ cutouts: e.target.checked })}
+              className="h-5 w-5 shrink-0 accent-sky"
+            />
+          </label>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-bold">Stampa solo stelline</span>
+            <span className="text-xs text-muted">
+              A4 verticale, {cutoutGrid.cols * cutoutGrid.rows} stelline rotonde da {CIRCLE / 10} cm
+            </span>
+            <div className="flex gap-2">
+              <Button small tone="soft" disabled={exporting} onClick={() => onExportStars('stampa')}>
+                Stelline · stampa
+              </Button>
+              <Button small tone="soft" disabled={exporting} onClick={() => onExportStars('whatsapp')}>
+                Stelline · WhatsApp
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

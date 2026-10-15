@@ -16,7 +16,6 @@ import { templates } from '../lib/sheet'
 import { useTouchSelection } from '../lib/useTouchSelection'
 import type { Cell, Sheet } from '../types'
 import { PrintSheetCell, SortableSheetCell } from './SheetCell'
-import { TokenBoardEdit, TokenBoardPrint } from './TokenBoard'
 
 interface EditProps {
   sheet: Sheet
@@ -25,11 +24,10 @@ interface EditProps {
   onChange: (patch: Partial<Sheet>) => void
   onChooseScene: (index: number) => void
   onChooseSymbol: (index: number) => void
-  onChooseReward: () => void
 }
 
 /** Pagina A4 modificabile, per il composer. */
-export function SheetView({ sheet, scale, onChange, onChooseScene, onChooseSymbol, onChooseReward }: EditProps) {
+export function SheetView({ sheet, scale, onChange, onChooseScene, onChooseSymbol }: EditProps) {
   const template = templates[sheet.template]
   const selection = useTouchSelection()
 
@@ -44,18 +42,6 @@ export function SheetView({ sheet, scale, onChange, onChooseScene, onChooseSymbo
       ({ transform }) => ({ ...transform, x: transform.x / scale, y: transform.y / scale }),
     [scale],
   )
-
-  if (template.kind === 'tokens') {
-    return (
-      <TokenBoardEdit
-        sheet={sheet}
-        onChange={onChange}
-        onChooseScene={onChooseScene}
-        onChooseSymbol={onChooseSymbol}
-        onChooseReward={onChooseReward}
-      />
-    )
-  }
 
   function updateCell(index: number, patch: Partial<Cell>) {
     onChange({ cells: sheet.cells.map((c, i) => (i === index ? { ...c, ...patch } : c)) })
@@ -106,6 +92,7 @@ export function SheetView({ sheet, scale, onChange, onChooseScene, onChooseSymbo
                   index={i}
                   character={sheet.character}
                   template={template}
+                  doneCircle={sheet.doneCircle}
                   selected={selection.isSelected(cell.id)}
                   onSelect={selection.selectHandler(cell.id)}
                   onChoose={() => onChooseScene(i)}
@@ -134,7 +121,6 @@ export function SheetView({ sheet, scale, onChange, onChooseScene, onChooseSymbo
 /** Pagina A4 statica: è quella che finisce nel PDF. */
 export function PrintSheetView({ sheet, imageVariant }: { sheet: Sheet; imageVariant: ImageVariant }) {
   const template = templates[sheet.template]
-  if (template.kind === 'tokens') return <TokenBoardPrint sheet={sheet} imageVariant={imageVariant} />
   return (
     <SheetPage
       sheet={sheet}
@@ -153,6 +139,7 @@ export function PrintSheetView({ sheet, imageVariant }: { sheet: Sheet; imageVar
               index={i}
               character={sheet.character}
               template={template}
+              doneCircle={sheet.doneCircle}
               imageVariant={imageVariant}
             />
           )),

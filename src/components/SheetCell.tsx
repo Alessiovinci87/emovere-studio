@@ -4,6 +4,7 @@ import type { CSSProperties, HTMLAttributes, Ref } from 'react'
 import { getScene, sceneImage, sceneTitle, type ImageVariant } from '../lib/catalog'
 import { stepColors, type Template } from '../lib/sheet'
 import type { Cell, CellSymbol, Character } from '../types'
+import { DoneCircle } from './Stars'
 import { SymbolIcon, cornerClass } from './SymbolIcon'
 
 interface Props {
@@ -11,6 +12,8 @@ interface Props {
   index: number
   character: Character
   template: Template
+  /** Cerchietto per la stellina "fatto" sull'angolo in alto a destra della vignetta */
+  doneCircle: boolean
 }
 
 interface EditProps extends Props {
@@ -130,6 +133,7 @@ function CellFrame({
   index,
   character,
   template,
+  doneCircle,
   imageVariant,
   time,
   text,
@@ -178,7 +182,13 @@ function CellFrame({
         <div className="relative min-h-0 flex-1 [container-type:size]">
           {scene ? (
             <>
-              <SceneSquare code={scene.code} character={character} variant={imageVariant} symbol={cell.symbol} />
+              <SceneSquare
+                code={scene.code}
+                character={character}
+                variant={imageVariant}
+                symbol={cell.symbol}
+                doneCircle={doneCircle}
+              />
               {overlay}
             </>
           ) : (
@@ -201,13 +211,17 @@ export function SceneSquare({
   character,
   variant,
   symbol,
+  doneCircle,
 }: {
   code: string
   character: Character
   variant: ImageVariant
   symbol?: CellSymbol | null
+  doneCircle?: boolean
 }) {
   const scene = getScene(code)
+  // L'angolo in alto a destra è del cerchietto: un simbolo messo lì passa in alto a sinistra
+  const corner = symbol && doneCircle && symbol.corner === 'tr' ? 'tl' : symbol?.corner
   return (
     <div className="absolute inset-0 m-auto size-[min(100cqw,100cqh)]">
       <img
@@ -216,7 +230,8 @@ export function SceneSquare({
         draggable={false}
         className="h-full w-full rounded-[7%] object-cover"
       />
-      {symbol && <SymbolIcon kind={symbol.kind} className={`absolute w-[30%] ${cornerClass[symbol.corner]}`} />}
+      {symbol && corner && <SymbolIcon kind={symbol.kind} className={`absolute w-[30%] ${cornerClass[corner]}`} />}
+      {doneCircle && <DoneCircle />}
     </div>
   )
 }
@@ -227,30 +242,23 @@ export function SceneSquare({
  */
 export function CellTools({
   selected,
-  compact,
   onChoose,
   onSymbol,
   onClear,
 }: {
   selected: boolean
-  /** Vignette piccole (tabella a gettoni): pulsanti in colonna che stanno nei 25 mm */
-  compact?: boolean
   onChoose: () => void
   onSymbol?: () => void
   onClear: () => void
 }) {
-  const big = selected && !compact
+  const big = selected
   const visible = selected
     ? 'opacity-100'
     : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100'
   return (
     <div
       className={`absolute z-[2] flex justify-center transition ${visible} ${
-        selected
-          ? `inset-0 flex-col items-center justify-center ${compact ? 'gap-[0.8mm]' : 'gap-[2mm]'}`
-          : compact
-            ? 'inset-0 flex-col items-center justify-center gap-[0.8mm]'
-            : 'inset-x-0 bottom-[1mm] gap-[1.5mm]'
+        selected ? 'inset-0 flex-col items-center justify-center gap-[2mm]' : 'inset-x-0 bottom-[1mm] gap-[1.5mm]'
       }`}
     >
       <CellButton big={big} onClick={onChoose}>

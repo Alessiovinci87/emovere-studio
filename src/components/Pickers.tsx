@@ -85,7 +85,7 @@ export function TemplatePicker({ onPick, onClose }: { onPick: (id: TemplateId) =
               onClick={() => onPick(t.id)}
               className="flex h-full w-full flex-col items-center gap-2 rounded-2xl border border-line bg-white p-4 font-bold transition hover:border-sky hover:bg-sky-soft"
             >
-              {t.kind === 'tokens' ? <TokenGlyph /> : <TemplateGlyph cols={t.cols} rows={t.rows} arrows={t.arrows} />}
+              <TemplateGlyph cols={t.cols} rows={t.rows} arrows={t.arrows} />
               {t.label}
             </button>
           </li>
@@ -96,24 +96,6 @@ export function TemplatePicker({ onPick, onClose }: { onPick: (id: TemplateId) =
 }
 
 /** Schizzo della griglia del modello. */
-/** Schizzo della tabella a gettoni: A4 orizzontale, righe di caselle e premio a destra. */
-function TokenGlyph() {
-  return (
-    <div className="flex h-12 w-16 gap-0.5 rounded-md border border-line bg-cream p-1" aria-hidden="true">
-      <div className="flex flex-1 flex-col justify-between">
-        {[0, 1, 2].map((r) => (
-          <div key={r} className="flex gap-0.5">
-            {[0, 1, 2, 3, 4].map((c) => (
-              <span key={c} className={`h-2 flex-1 rounded-sm ${c === 0 ? 'bg-sky/50' : 'bg-[#f7c948]/60'}`} />
-            ))}
-          </div>
-        ))}
-      </div>
-      <span className="w-3 rounded-sm bg-[#f0b54a]/50" />
-    </div>
-  )
-}
-
 function TemplateGlyph({ cols, rows, arrows }: { cols: number; rows: number; arrows?: boolean }) {
   return (
     <div
@@ -132,15 +114,19 @@ function TemplateGlyph({ cols, rows, arrows }: { cols: number; rows: number; arr
 export function SymbolPicker({
   index,
   value,
+  doneCircle,
   onChange,
   onClose,
 }: {
   index: number
   value: CellSymbol | null
+  /** Con il cerchietto per la stellina l'angolo in alto a destra è occupato */
+  doneCircle: boolean
   onChange: (symbol: CellSymbol | null) => void
   onClose: () => void
 }) {
-  const corner = value?.corner ?? 'tr'
+  const fallback = doneCircle ? 'tl' : 'tr'
+  const corner = value && !(doneCircle && value.corner === 'tr') ? value.corner : fallback
   return (
     <Modal title={`Simbolo per il riquadro ${index + 1}`} onClose={onClose} size="sm">
       <div className="flex flex-col gap-5">
@@ -170,9 +156,10 @@ export function SymbolPicker({
                   role="radio"
                   aria-checked={corner === o.corner}
                   aria-label={o.label}
-                  title={o.label}
+                  title={doneCircle && o.corner === 'tr' ? 'Qui c’è il cerchietto per la stellina' : o.label}
+                  disabled={doneCircle && o.corner === 'tr'}
                   onClick={() => onChange({ ...value, corner: o.corner })}
-                  className={`relative h-16 rounded-xl border-2 transition ${
+                  className={`relative h-16 rounded-xl border-2 transition disabled:cursor-not-allowed disabled:opacity-30 ${
                     corner === o.corner ? 'border-sky bg-sky-soft' : 'border-line bg-white hover:border-sky'
                   }`}
                 >
