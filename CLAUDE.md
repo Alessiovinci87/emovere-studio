@@ -3,11 +3,12 @@
 Strumento per comporre schede visive (routine, storie sociali, prima/poi, scelte) per bambini 3-8 anni con autismo, ADHD e DOP, partendo da una libreria di vignette illustrate. Utente iniziale: Martina (psicopedagogista, Centro Emovere). Obiettivo commerciale futuro: vendita ad altri professionisti.
 
 ## Obiettivo di questa fase
-Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. Niente login, niente backend, niente generazione AI. Velocità e semplicità prima di tutto.
+Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. Niente login, niente database: dati delle schede nel browser. Unica parte server: le funzioni Vercel per creare vignette con AI. Velocità e semplicità prima di tutto.
 
 ## Stack
 - React + Vite + TypeScript, Tailwind CSS
-- Nessun backend: immagini in `public/library/` (vedi sotto), catalogo in `src/data/catalog.json`
+- Immagini in `public/library/` (vedi sotto), catalogo in `src/data/catalog.json`
+- Funzioni Vercel in `api/` (solo per le vignette AI, vedi "Vignette con AI"); vignette AI e indice su Vercel Blob privato
 - Cartelle, schede e bozza in localStorage (solo per il prototipo), con backup JSON esportabile
 - Export PDF lato client: la scheda è un DOM in formato A4, esportato con `html-to-image` + `jsPDF`
 - Deploy di prova su Vercel, protetto da password (vedi "Deploy")
@@ -42,6 +43,29 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
 - Impostazioni: esporta/importa backup, data dell'ultimo backup, privacy, versione (da `package.json`, `__APP_VERSION__`)
 - Editor a schermo intero (`src/components/Editor.tsx`, la navigazione si nasconde): barra in alto con Indietro/Fatto, titolo, stato, bambina/bambino, Salva (bozza), menu Esporta (PDF stampa, PDF WhatsApp e, con il cerchietto, stelline); pannello opzioni a sinistra richiudibile (su telefono sale dal basso, con stato e personaggio); foglio al centro adattato allo schermo, zoom −/+/Adatta
 - Stile: sfondo crema, card bianche con angoli arrotondati e ombra leggera, molto spazio. **Un solo colore di accento** (`--color-accent`, blu `#3f74b8`, e `accent-soft`) per pulsanti principali, voce attiva, badge e focus. I colori di stati e passaggi sono contenuto, non accento
+
+## Vignette con AI
+- Libreria → "Crea nuova vignetta con AI" (`src/components/AiCreateDialog.tsx`):
+  1. scelte: personaggio principale (bambina/bambino), ambiente (14), abbigliamento (casa, pigiama, grembiule, uscita), espressione (serena, felice, triste, arrabbiata, spaventata, concentrata, orgogliosa), adulto facoltativo (mamma, papà, maestra: attivi solo se c'è il loro foglio di riferimento)
+  2. descrizione in italiano di cosa fa il bambino (es. "si allaccia le scarpe da solo")
+  3. "Genera": la versione bambina e la versione bambino vengono create in parallelo; anteprima con "Salva in libreria", "Rigenera", "Annulla"
+  4. al salvataggio si confermano titoli (f/m) e tag proposti; il codice è `X` + progressivo (X001, X002…), mai riusato anche dopo un'eliminazione
+- In libreria le vignette AI hanno l'etichetta "AI", il filtro "Create con AI" (blocco `X`) e si possono eliminare (con avviso se usate in qualche scheda)
+- Server (`api/`, protetto dalla password di `middleware.ts`):
+  - `GET /api/generate`: limite, immagini usate oggi, adulti disponibili. `POST /api/generate`: (a) modello di testo economico → frase d'azione in inglese + `title_f`, `title_m`, tag in italiano (JSON a schema fisso); (b) endpoint di modifica immagini, una chiamata per personaggio con il suo foglio di riferimento (+ adulto), qualità media, 1024×1024, WebP
+  - Il prompt dell'immagine lo compone solo il server con il template fisso (`buildImagePrompt` in `src/config/ai.ts`); il testo dell'utente non entra mai nel prompt dell'immagine. Rispetto al template base ci sono due righe in più: espressione e, se scelto, adulto
+  - Testi fissi di ambienti, abbigliamenti e adulti presi dalla "Libreria prompt scene – Emovere", in `src/config/ai.ts` (lo stesso file definisce modelli, qualità, formato, limite predefinito)
+  - Modelli (verificati sulla documentazione OpenAI a ottobre 2026): immagini `gpt-image-2.5-sunburst`, testo `gpt-6-luna`. Si cambiano in `AI_MODELS`
+  - Limite giornaliero di immagini (default 30, ogni vignetta ne usa 2), azzerato a mezzanotte italiana; messaggio chiaro quando è raggiunto
+  - `GET/POST/DELETE /api/library`: elenco, salvataggio, eliminazione. `GET /api/image?p=…`: serve le immagini dal Blob privato (stesso dominio: niente CORS per l'export PDF, dietro password)
+  - Blob privato: `bambina/X001_bambina.webp`, `bambino/X001_bambino.webp`, `index.json` (voci della libreria AI, unite a `catalog.json` dall'app con `setAiScenes`), `usage.json` (contatore del giorno)
+- Fogli di riferimento in `public/library/refs/`: `bambina_ref.png`, `bambino_ref.png`; gli adulti si aggiungono come `mamma_ref.png`, `papa_ref.png`, `maestra_ref.png` (inclusi nella funzione con `includeFiles` in `vercel.json`)
+- In locale (`npm run dev`) le funzioni non girano: la finestra AI dice che funziona solo online. Collaudo delle funzioni: compilare con `tsc -p tsconfig.api.json --noEmit false --outDir .apitest --rootDir .` e simulare OpenAI/Blob (cartella `.apitest` ignorata da git)
+- Variabili d'ambiente su Vercel:
+  - `OPENAI_API_KEY`: chiave OpenAI, **solo** su Vercel (mai nel codice, nel browser o in chat)
+  - `BLOB_READ_WRITE_TOKEN`: creata da Vercel collegando uno store Blob al progetto (o OIDC con `BLOB_STORE_ID`)
+  - `AI_DAILY_LIMIT`: facoltativa, immagini al giorno (default 30)
+  - `APP_PASSWORD`: la password dell'app (vedi "Deploy")
 
 ## Funzioni del prototipo
 1. **Libreria**: griglia di vignette, ricerca testuale su titolo e tag (case-insensitive, senza accenti), filtri per blocco, ambiente e personaggio.
@@ -88,7 +112,7 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
 ## Deploy
 - Vercel, configurazione in `vercel.json`; la build genera le immagini con `sharp`
 - Protezione: `middleware.ts` (Vercel Routing Middleware) mostra una schermata con password prima di qualunque pagina o immagine
-- Password nella variabile d'ambiente `APP_PASSWORD` (su Vercel, mai nel codice); senza variabile il sito resta chiuso
+- Password nella variabile d'ambiente `APP_PASSWORD` (su Vercel, mai nel codice); senza variabile il sito resta chiuso. Protegge anche le funzioni `/api`
 - Dopo l'accesso un cookie HttpOnly ricorda il browser per un anno; cambiando la password tutti i cookie vecchi decadono
 - In locale (`npm run dev`) il middleware non gira
 
@@ -99,7 +123,7 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
 - Interfaccia in italiano
 
 ## Fuori da questa fase
-Login e multiutente, backend e database, sincronizzazione tra dispositivi, generazione AI delle immagini, abbonamenti, guide per i genitori: arriveranno dopo la validazione con Martina.
+Login e multiutente, database e sincronizzazione delle schede tra dispositivi, abbonamenti, guide per i genitori: arriveranno dopo la validazione con Martina.
 
 ## Convenzioni
 - Componenti piccoli e tipizzati, niente librerie superflue

@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { AiCreateDialog } from './components/AiCreateDialog'
 import { AppShell, Page, SectionHeader } from './components/AppShell'
 import { Editor } from './components/Editor'
+import { SparkleIcon } from './components/Icons'
 import { FoldersView } from './components/FoldersView'
 import { FolderView } from './components/FolderView'
 import { Library } from './components/Library'
 import { Modal } from './components/Modal'
 import { FolderPicker, SymbolPicker } from './components/Pickers'
 import { Button } from './components/ui'
+import { aiApi } from './lib/ai'
+import { setAiScenes } from './lib/catalog'
 import { downloadBlob } from './lib/download'
 import { dueReminders, todayISO } from './lib/reminders'
 import { useRouter, type Route, type Section, sectionOf } from './lib/router'
@@ -35,6 +39,19 @@ export default function App() {
   const [folderAction, setFolderAction] = useState<FolderAction | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [lastBackup, setLastBackup] = useState<string | null>(store.loadLastBackup)
+  /** Vignette generate con AI (unite al catalogo) */
+  const [aiScenes, setAiList] = useState<Scene[]>([])
+  const [aiOpen, setAiOpen] = useState(false)
+
+  /** Aggiorna il catalogo con le vignette AI e ridisegna */
+  const applyAiScenes = useCallback((list: Scene[]) => {
+    setAiScenes(list)
+    setAiList(list)
+  }, [])
+
+  useEffect(() => {
+    aiApi.scenes().then(applyAiScenes)
+  }, [applyAiScenes])
 
   useEffect(() => {
     if (!store.saveData(data)) setToast(STORAGE_FULL)
@@ -188,6 +205,23 @@ export default function App() {
     }
   }
 
+  async function deleteAiScene(scene: Scene) {
+    const used = allSheets.filter((s) => s.cells.some((c) => c.code === scene.code)).length
+    const warning = used > 0 ? `
+
+È usata in ${used} ${used === 1 ? 'scheda' : 'schede'}: lì il riquadro resterà vuoto.` : ''
+    if (!confirm(`Eliminare la vignetta “${scene.title_f}” (${scene.code})?${warning}
+
+Non si può annullare.`)) return
+    try {
+      await aiApi.remove(scene.code)
+      applyAiScenes(aiScenes.filter((s) => s.code !== scene.code))
+      setToast(`Vignetta ${scene.code} eliminata`)
+    } catch (err) {
+      alert((err as Error).message)
+    }
+  }
+
   const closePicker = useCallback(() => setPickTarget(null), [])
   const closeSymbol = useCallback(() => setSymbolIndex(null), [])
   const openFolder = (id: string) => navigate({ name: 'cartella', id })
@@ -262,8 +296,21 @@ export default function App() {
               title="Libreria"
               subtitle={`Tocca una vignetta per aggiungerla a “${lastOpened.title || 'Scheda'}”.`}
               onBack={backTo({ name: 'oggi' })}
+              actions={
+                <Button tone="primary" onClick={() => setAiOpen(true)} className="flex items-center gap-2">
+                  <SparkleIcon className="h-5 w-5" />
+                  Crea nuova vignetta con AI
+                </Button>
+              }
             />
-            <Library character={libraryCharacter} onCharacterChange={setLibraryCharacter} onPick={addToLastSheet} stickyBar />
+            <Library
+              key={aiScenes.length}
+              character={libraryCharacter}
+              onCharacterChange={setLibraryCharacter}
+              onPick={addToLastSheet}
+              onDeleteAi={deleteAiScene}
+              stickyBar
+            />
           </Page>
         )
       case 'impostazioni':
@@ -347,6 +394,17 @@ export default function App() {
             if (!('draft' in choice)) confirmFolderAction(folderAction, choice)
           }}
           onClose={() => setFolderAction(null)}
+        />
+      )}
+
+      {aiOpen && (
+        <AiCreateDialog
+          onSaved={(scene) => {
+            applyAiScenes([...aiScenes, scene])
+            setAiOpen(false)
+            setToast(`Vignetta ${scene.code} salvata in libreria`)
+          }}
+          onClose={() => setAiOpen(false)}
         />
       )}
 

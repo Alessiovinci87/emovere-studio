@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
-import { catalog, filterScenes, sceneThumb, sceneTitle, settings, usedBlocks } from '../lib/catalog'
+import { blockLabel, filterScenes, sceneThumb, sceneTitle, usedBlocks, usedSettings } from '../lib/catalog'
 import type { Character, Scene } from '../types'
 import { CharacterToggle } from './CharacterToggle'
+import { TrashIcon } from './Icons'
 
 interface Props {
   character: Character
@@ -10,9 +11,11 @@ interface Props {
   onPick: (scene: Scene) => void
   /** Sezione Libreria: ricerca e filtri in una barra fissa in alto */
   stickyBar?: boolean
+  /** Elimina una vignetta generata con AI (solo nella sezione Libreria) */
+  onDeleteAi?: (scene: Scene) => void
 }
 
-export function Library({ character, onCharacterChange, onPick, stickyBar }: Props) {
+export function Library({ character, onCharacterChange, onPick, stickyBar, onDeleteAi }: Props) {
   const [query, setQuery] = useState('')
   const [block, setBlock] = useState<string | null>(null)
   const [setting, setSetting] = useState<string | null>(null)
@@ -46,9 +49,9 @@ export function Library({ character, onCharacterChange, onPick, stickyBar }: Pro
           <Chip active={block === null} onClick={() => setBlock(null)}>
             Tutti i blocchi
           </Chip>
-          {usedBlocks.map((b) => (
+          {usedBlocks().map((b) => (
             <Chip key={b} active={block === b} onClick={() => setBlock(block === b ? null : b)}>
-              {catalog.blocks[b]}
+              {blockLabel(b)}
             </Chip>
           ))}
         </div>
@@ -58,7 +61,7 @@ export function Library({ character, onCharacterChange, onPick, stickyBar }: Pro
           <Chip active={setting === null} onClick={() => setSetting(null)} small>
             Tutti
           </Chip>
-          {settings.map((s) => (
+          {usedSettings().map((s) => (
             <Chip key={s} active={setting === s} onClick={() => setSetting(setting === s ? null : s)} small>
               {s.charAt(0).toUpperCase() + s.slice(1)}
             </Chip>
@@ -71,7 +74,7 @@ export function Library({ character, onCharacterChange, onPick, stickyBar }: Pro
           Nessuna vignetta trovata.
           {hasFilters && (
             <button
-              className="ml-2 font-bold text-sky underline"
+              className="ml-2 font-bold text-accent underline"
               onClick={() => {
                 setQuery('')
                 setBlock(null)
@@ -85,22 +88,39 @@ export function Library({ character, onCharacterChange, onPick, stickyBar }: Pro
       ) : (
         <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {scenes.map((scene) => (
-            <li key={scene.code}>
+            <li key={scene.code} className="relative">
               <button
                 onClick={() => onPick(scene)}
                 className="group flex h-full w-full flex-col overflow-hidden rounded-3xl bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
               >
-                <img
-                  src={sceneThumb(scene.code, character)}
-                  alt=""
-                  loading="lazy"
-                  className="aspect-square w-full bg-sand object-cover"
-                />
+                <span className="relative block">
+                  <img
+                    src={sceneThumb(scene.code, character)}
+                    alt=""
+                    loading="lazy"
+                    className="aspect-square w-full bg-sand object-cover"
+                  />
+                  {scene.ai && (
+                    <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-0.5 text-xs font-bold text-accent shadow-sm">
+                      AI
+                    </span>
+                  )}
+                </span>
                 <span className="flex flex-1 items-baseline justify-between gap-2 px-4 py-3">
                   <span className="font-bold leading-snug">{sceneTitle(scene, character)}</span>
                   <span className="text-xs text-muted">{scene.code}</span>
                 </span>
               </button>
+              {scene.ai && onDeleteAi && (
+                <button
+                  onClick={() => onDeleteAi(scene)}
+                  aria-label={`Elimina la vignetta ${scene.code}`}
+                  title="Elimina vignetta"
+                  className="absolute right-2 top-2 flex h-11 w-11 items-center justify-center rounded-full bg-white/95 text-[#b5513a] shadow-sm transition hover:bg-peach-soft"
+                >
+                  <TrashIcon className="h-5 w-5" />
+                </button>
+              )}
             </li>
           ))}
         </ul>

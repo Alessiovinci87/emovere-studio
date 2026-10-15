@@ -12,6 +12,10 @@ export interface Scene {
   tags: string[]
   characters: Character[]
   adults: string[]
+  /** Vignetta generata con AI nell'app (codice X001, X002…) */
+  ai?: boolean
+  /** Solo vignette AI: indirizzi delle immagini (servite da /api/image) */
+  images?: Record<Character, string>
 }
 
 export interface Catalog {

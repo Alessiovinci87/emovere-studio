@@ -8,3 +8,4 @@ dist
 public/library/webp
 public/library/thumbs
 *.tsbuildinfo
+.apitest
