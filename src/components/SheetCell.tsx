@@ -3,7 +3,7 @@ import { CSS } from '@dnd-kit/utilities'
 import type { CSSProperties, HTMLAttributes, Ref } from 'react'
 import { getScene, sceneImage, sceneTitle, type ImageVariant } from '../lib/catalog'
 import { stepColors, type Template } from '../lib/sheet'
-import type { Cell, Character } from '../types'
+import type { Cell, CellSymbol, Character } from '../types'
 import { SymbolIcon, cornerClass } from './SymbolIcon'
 
 interface Props {
@@ -39,10 +39,6 @@ export function SortableSheetCell({ selected, onSelect, onChoose, onSymbol, onCl
   })
   const scene = cell.code ? getScene(cell.code) : undefined
   const defaultText = scene ? sceneTitle(scene, character) : ''
-  // Comandi visibili (e cliccabili) solo con hover, focus o selezione: mai pulsanti invisibili sotto il dito
-  const toolsVisible = selected
-    ? 'opacity-100'
-    : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100'
 
   return (
     <CellFrame
@@ -74,27 +70,8 @@ export function SortableSheetCell({ selected, onSelect, onChoose, onSymbol, onCl
           {...stopDrag}
         />
       }
-      overlay={
-        <div
-          className={`absolute z-[2] flex justify-center transition ${toolsVisible} ${
-            // Touch: pulsanti più grandi, in colonna al centro della vignetta
-            selected ? 'inset-0 flex-col items-center gap-[2mm]' : 'inset-x-0 bottom-[1mm] gap-[1.5mm]'
-          }`}
-        >
-          <CellButton big={selected} onClick={onChoose}>Cambia</CellButton>
-          <CellButton big={selected} onClick={onSymbol}>Simbolo</CellButton>
-          <CellButton big={selected} onClick={onClear}>Svuota</CellButton>
-        </div>
-      }
-      empty={
-        <button
-          onClick={onChoose}
-          className="flex h-full w-full flex-col items-center justify-center gap-[1mm] rounded-[3mm] border-[0.5mm] border-dashed border-line text-[3.6mm] font-bold text-muted transition hover:border-sky hover:bg-sky-soft hover:text-ink"
-        >
-          <span className="text-[8mm] leading-none">+</span>
-          Scegli vignetta
-        </button>
-      }
+      overlay={<CellTools selected={selected} onChoose={onChoose} onSymbol={onSymbol} onClear={onClear} />}
+      empty={<EmptyPick onClick={onChoose} />}
       text={
         <textarea
           value={cell.text ?? defaultText}
@@ -201,18 +178,7 @@ function CellFrame({
         <div className="relative min-h-0 flex-1 [container-type:size]">
           {scene ? (
             <>
-              {/* Le vignette sono quadrate: il box coincide con l'immagine, così angoli e simboli la seguono */}
-              <div className="absolute inset-0 m-auto size-[min(100cqw,100cqh)]">
-                <img
-                  src={sceneImage(scene.code, character, imageVariant)}
-                  alt={sceneTitle(scene, character)}
-                  draggable={false}
-                  className="h-full w-full rounded-[7%] object-cover"
-                />
-                {cell.symbol && (
-                  <SymbolIcon kind={cell.symbol.kind} className={`absolute w-[30%] ${cornerClass[cell.symbol.corner]}`} />
-                )}
-              </div>
+              <SceneSquare code={scene.code} character={character} variant={imageVariant} symbol={cell.symbol} />
               {overlay}
             </>
           ) : (
@@ -223,6 +189,95 @@ function CellFrame({
 
       {text}
     </div>
+  )
+}
+
+/**
+ * Vignetta quadrata dentro un contenitore con `container-type: size`: il box coincide con l'immagine,
+ * così angoli arrotondati e simboli la seguono. Le vignette della libreria sono quadrate.
+ */
+export function SceneSquare({
+  code,
+  character,
+  variant,
+  symbol,
+}: {
+  code: string
+  character: Character
+  variant: ImageVariant
+  symbol?: CellSymbol | null
+}) {
+  const scene = getScene(code)
+  return (
+    <div className="absolute inset-0 m-auto size-[min(100cqw,100cqh)]">
+      <img
+        src={sceneImage(code, character, variant)}
+        alt={scene ? sceneTitle(scene, character) : ''}
+        draggable={false}
+        className="h-full w-full rounded-[7%] object-cover"
+      />
+      {symbol && <SymbolIcon kind={symbol.kind} className={`absolute w-[30%] ${cornerClass[symbol.corner]}`} />}
+    </div>
+  )
+}
+
+/**
+ * Comandi di una vignetta piena. Visibili (e cliccabili) solo con hover, focus o selezione touch:
+ * mai pulsanti invisibili sotto il dito. Da selezionata (touch) sono più grandi, in colonna al centro.
+ */
+export function CellTools({
+  selected,
+  compact,
+  onChoose,
+  onSymbol,
+  onClear,
+}: {
+  selected: boolean
+  /** Vignette piccole (tabella a gettoni): pulsanti in colonna che stanno nei 25 mm */
+  compact?: boolean
+  onChoose: () => void
+  onSymbol?: () => void
+  onClear: () => void
+}) {
+  const big = selected && !compact
+  const visible = selected
+    ? 'opacity-100'
+    : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100'
+  return (
+    <div
+      className={`absolute z-[2] flex justify-center transition ${visible} ${
+        selected
+          ? `inset-0 flex-col items-center justify-center ${compact ? 'gap-[0.8mm]' : 'gap-[2mm]'}`
+          : compact
+            ? 'inset-0 flex-col items-center justify-center gap-[0.8mm]'
+            : 'inset-x-0 bottom-[1mm] gap-[1.5mm]'
+      }`}
+    >
+      <CellButton big={big} onClick={onChoose}>
+        Cambia
+      </CellButton>
+      {onSymbol && (
+        <CellButton big={big} onClick={onSymbol}>
+          Simbolo
+        </CellButton>
+      )}
+      <CellButton big={big} onClick={onClear}>
+        Svuota
+      </CellButton>
+    </div>
+  )
+}
+
+/** Riquadro vuoto: apre la libreria. */
+export function EmptyPick({ onClick, label = 'Scegli vignetta' }: { onClick: () => void; label?: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex h-full w-full flex-col items-center justify-center gap-[1mm] rounded-[3mm] border-[0.5mm] border-dashed border-line text-[3.6mm] font-bold text-muted transition hover:border-sky hover:bg-sky-soft hover:text-ink"
+    >
+      <span className="text-[8mm] leading-none">+</span>
+      {label}
+    </button>
   )
 }
 

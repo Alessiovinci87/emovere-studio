@@ -10,12 +10,13 @@ import {
   type Modifier,
 } from '@dnd-kit/core'
 import { SortableContext, arrayMove, rectSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
-import { Children, Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Children, Fragment, useMemo, type ReactNode } from 'react'
 import type { ImageVariant } from '../lib/catalog'
 import { templates } from '../lib/sheet'
-import { useCoarsePointer } from '../lib/useCoarsePointer'
+import { useTouchSelection } from '../lib/useTouchSelection'
 import type { Cell, Sheet } from '../types'
 import { PrintSheetCell, SortableSheetCell } from './SheetCell'
+import { TokenBoardEdit, TokenBoardPrint } from './TokenBoard'
 
 interface EditProps {
   sheet: Sheet
@@ -24,23 +25,13 @@ interface EditProps {
   onChange: (patch: Partial<Sheet>) => void
   onChooseScene: (index: number) => void
   onChooseSymbol: (index: number) => void
+  onChooseReward: () => void
 }
 
 /** Pagina A4 modificabile, per il composer. */
-export function SheetView({ sheet, scale, onChange, onChooseScene, onChooseSymbol }: EditProps) {
+export function SheetView({ sheet, scale, onChange, onChooseScene, onChooseSymbol, onChooseReward }: EditProps) {
   const template = templates[sheet.template]
-  const touch = useCoarsePointer()
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-
-  // Touch: un tocco fuori dal riquadro selezionato lo deseleziona
-  useEffect(() => {
-    if (!selectedId) return
-    const onPointerDown = (e: PointerEvent) => {
-      if (!(e.target as HTMLElement).closest(`[data-cell-id="${selectedId}"]`)) setSelectedId(null)
-    }
-    document.addEventListener('pointerdown', onPointerDown)
-    return () => document.removeEventListener('pointerdown', onPointerDown)
-  }, [selectedId])
+  const selection = useTouchSelection()
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -53,6 +44,18 @@ export function SheetView({ sheet, scale, onChange, onChooseScene, onChooseSymbo
       ({ transform }) => ({ ...transform, x: transform.x / scale, y: transform.y / scale }),
     [scale],
   )
+
+  if (template.kind === 'tokens') {
+    return (
+      <TokenBoardEdit
+        sheet={sheet}
+        onChange={onChange}
+        onChooseScene={onChooseScene}
+        onChooseSymbol={onChooseSymbol}
+        onChooseReward={onChooseReward}
+      />
+    )
+  }
 
   function updateCell(index: number, patch: Partial<Cell>) {
     onChange({ cells: sheet.cells.map((c, i) => (i === index ? { ...c, ...patch } : c)) })
@@ -103,8 +106,8 @@ export function SheetView({ sheet, scale, onChange, onChooseScene, onChooseSymbo
                   index={i}
                   character={sheet.character}
                   template={template}
-                  selected={touch && selectedId === cell.id}
-                  onSelect={touch ? () => setSelectedId(cell.id) : undefined}
+                  selected={selection.isSelected(cell.id)}
+                  onSelect={selection.selectHandler(cell.id)}
                   onChoose={() => onChooseScene(i)}
                   onSymbol={() => onChooseSymbol(i)}
                   onClear={() => updateCell(i, { code: null, text: null, symbol: null })}
@@ -131,6 +134,7 @@ export function SheetView({ sheet, scale, onChange, onChooseScene, onChooseSymbo
 /** Pagina A4 statica: è quella che finisce nel PDF. */
 export function PrintSheetView({ sheet, imageVariant }: { sheet: Sheet; imageVariant: ImageVariant }) {
   const template = templates[sheet.template]
+  if (template.kind === 'tokens') return <TokenBoardPrint sheet={sheet} imageVariant={imageVariant} />
   return (
     <SheetPage
       sheet={sheet}

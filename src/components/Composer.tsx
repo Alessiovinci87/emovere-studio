@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ExportKind } from '../lib/exportPdf'
+import type { ExportContent, ExportKind } from '../lib/exportPdf'
 import { changeTemplate, retitleForName, templateList, templates } from '../lib/sheet'
 import type { Folder, Sheet, TemplateId } from '../types'
 import { CharacterToggle } from './CharacterToggle'
@@ -7,11 +7,11 @@ import { Modal } from './Modal'
 import { ReminderEditor } from './ReminderEditor'
 import { SheetView } from './SheetView'
 import { StatusPicker } from './Status'
+import { TokenControls } from './TokenControls'
 import { Button, Field, NameInput, NotesField, inputClass } from './ui'
 
-/** Larghezza di un A4 in pixel CSS (210 mm a 96 dpi) */
-const A4_WIDTH_PX = (210 / 25.4) * 96
-const A4_HEIGHT_PX = (297 / 25.4) * 96
+/** mm → pixel CSS (96 dpi) */
+const PX_PER_MM = 96 / 25.4
 
 interface Props {
   sheet: Sheet
@@ -19,24 +19,39 @@ interface Props {
   onChange: (patch: Partial<Sheet>) => void
   onChooseScene: (index: number) => void
   onChooseSymbol: (index: number) => void
+  onChooseReward: () => void
   onSave: () => void
   onOpenFolder: (id: string) => void
   onNew: () => void
 }
 
-export function Composer({ sheet, folder, onChange, onChooseScene, onChooseSymbol, onSave, onOpenFolder, onNew }: Props) {
-  const scale = useFitScale()
+export function Composer({
+  sheet,
+  folder,
+  onChange,
+  onChooseScene,
+  onChooseSymbol,
+  onChooseReward,
+  onSave,
+  onOpenFolder,
+  onNew,
+}: Props) {
+  const template = templates[sheet.template]
+  const isTokens = template.kind === 'tokens'
+  // A4 verticale o orizzontale (tabella a gettoni)
+  const [pageW, pageH] = template.orientation === 'landscape' ? [297, 210] : [210, 297]
+  const scale = useFitScale(pageW * PX_PER_MM)
   const filled = sheet.cells.filter((c) => c.code).length
   const [exporting, setExporting] = useState<ExportKind | null>(null)
   const [askSave, setAskSave] = useState(false)
   /** Bozza per cui si è già risposto "No, grazie": non si ripropone a ogni PDF */
   const declinedFor = useRef<string | null>(null)
 
-  async function handleExport(kind: ExportKind) {
+  async function handleExport(kind: ExportKind, content: ExportContent = 'full') {
     setExporting(kind)
     try {
       const { exportPdf } = await import('../lib/exportPdf')
-      await exportPdf(sheet, kind)
+      await exportPdf(sheet, kind, content)
       if (!folder && declinedFor.current !== sheet.id) setAskSave(true)
     } catch (err) {
       console.error(err)
@@ -49,7 +64,8 @@ export function Composer({ sheet, folder, onChange, onChooseScene, onChooseSymbo
   function handleTemplate(id: TemplateId) {
     const count = templates[id].cols * templates[id].rows
     const lost = sheet.cells.slice(count).filter((c) => c.code).length
-    if (lost > 0 && !confirm(`Il nuovo modello ha ${count} riquadri: ${lost} vignette in fondo verranno tolte. Continuare?`))
+    const what = templates[id].kind === 'tokens' ? `${count} righe` : `${count} riquadri`
+    if (lost > 0 && !confirm(`Il nuovo modello ha ${what}: ${lost} vignette in fondo verranno tolte. Continuare?`))
       return
     onChange(changeTemplate(sheet, id))
   }
@@ -90,7 +106,9 @@ export function Composer({ sheet, folder, onChange, onChooseScene, onChooseSymbo
             ))}
           </select>
           <p className="text-sm text-muted">
-            {filled} di {sheet.cells.length} riquadri pieni
+            {isTokens
+              ? `${sheet.cells.length} ${sheet.cells.length === 1 ? 'riga' : 'righe'} · A4 orizzontale`
+              : `${filled} di ${sheet.cells.length} riquadri pieni`}
           </p>
         </Field>
 
@@ -110,20 +128,29 @@ export function Composer({ sheet, folder, onChange, onChooseScene, onChooseSymbo
           )}
         </div>
 
-        <label className="flex cursor-pointer items-center justify-between gap-3">
-          <span className="font-bold">Riquadro “Ricordo sempre”</span>
-          <input
-            type="checkbox"
-            checked={sheet.remember.enabled}
-            onChange={(e) => onChange({ remember: { ...sheet.remember, enabled: e.target.checked } })}
-            className="h-5 w-5 accent-sky"
+        {isTokens ? (
+          <TokenControls
+            sheet={sheet}
+            onChange={onChange}
+            exporting={exporting !== null}
+            onExportStars={(kind) => handleExport(kind, 'stars')}
           />
-        </label>
+        ) : (
+          <label className="flex cursor-pointer items-center justify-between gap-3">
+            <span className="font-bold">Riquadro “Ricordo sempre”</span>
+            <input
+              type="checkbox"
+              checked={sheet.remember.enabled}
+              onChange={(e) => onChange({ remember: { ...sheet.remember, enabled: e.target.checked } })}
+              className="h-5 w-5 accent-sky"
+            />
+          </label>
+        )}
 
         <p className="text-sm leading-relaxed text-muted">
-          Clicca su un riquadro vuoto per scegliere la vignetta. Su un riquadro pieno passa sopra (o toccalo, su
-          tablet) per cambiarla, svuotarla o aggiungere un simbolo. Trascina i riquadri per cambiare l'ordine (su
-          tablet: tieni premuto e trascina). Titolo, frasi e orari si modificano sul foglio.
+          {isTokens
+            ? 'Clicca su una vignetta vuota per sceglierla. Su una vignetta piena passa sopra (o toccala, su tablet) per cambiarla, svuotarla o aggiungere un simbolo. Titoli dei compiti e premio si modificano sul foglio.'
+            : "Clicca su un riquadro vuoto per scegliere la vignetta. Su un riquadro pieno passa sopra (o toccalo, su tablet) per cambiarla, svuotarla o aggiungere un simbolo. Trascina i riquadri per cambiare l'ordine (su tablet: tieni premuto e trascina). Titolo, frasi e orari si modificano sul foglio."}
         </p>
 
         <Field label="Scarica">
@@ -151,7 +178,7 @@ export function Composer({ sheet, folder, onChange, onChooseScene, onChooseSymbo
       <div ref={scale.ref} className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
         <div
           className="mx-auto overflow-hidden rounded-xl shadow-lg"
-          style={{ width: A4_WIDTH_PX * scale.value, height: A4_HEIGHT_PX * scale.value }}
+          style={{ width: pageW * PX_PER_MM * scale.value, height: pageH * PX_PER_MM * scale.value }}
         >
           <div style={{ transform: `scale(${scale.value})`, transformOrigin: 'top left' }}>
             <SheetView
@@ -160,6 +187,7 @@ export function Composer({ sheet, folder, onChange, onChooseScene, onChooseSymbo
               onChange={onChange}
               onChooseScene={onChooseScene}
               onChooseSymbol={onChooseSymbol}
+              onChooseReward={onChooseReward}
             />
           </div>
         </div>
@@ -233,20 +261,18 @@ function ExportButton({
   )
 }
 
-/** Scala la pagina A4 per farla stare nella larghezza disponibile (mai oltre il 100%). */
-function useFitScale() {
+/** Scala la pagina per farla stare nella larghezza disponibile (mai oltre il 100%). */
+function useFitScale(pageWidthPx: number) {
   const ref = useRef<HTMLDivElement>(null)
-  const [value, setValue] = useState(1)
+  const [available, setAvailable] = useState(pageWidthPx)
 
   useEffect(() => {
     const el = ref.current
     if (!el) return
-    const observer = new ResizeObserver(([entry]) => {
-      setValue(Math.min(1, entry.contentRect.width / A4_WIDTH_PX))
-    })
+    const observer = new ResizeObserver(([entry]) => setAvailable(entry.contentRect.width))
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
 
-  return { ref, value }
+  return { ref, value: Math.min(1, available / pageWidthPx) }
 }

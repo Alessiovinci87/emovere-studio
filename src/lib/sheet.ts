@@ -3,9 +3,13 @@ import type { Cell, ReminderKind, Sheet, SheetStatus, TemplateId } from '../type
 export interface Template {
   id: TemplateId
   label: string
+  /** grid = riquadri in griglia; tokens = tabella a gettoni (righe con caselle per le stelline) */
+  kind: 'grid' | 'tokens'
+  orientation: 'portrait' | 'landscape'
   /** Gruppo mostrato nella scelta del modello */
   group: string
   cols: number
+  /** Per la tabella a gettoni: numero di righe iniziale */
   rows: number
   /** Numeri dei passaggi e orari (solo routine) */
   numbered: boolean
@@ -19,9 +23,36 @@ export interface Template {
 }
 
 export const templates: Record<TemplateId, Template> = {
+  'routine-6': {
+    id: 'routine-6',
+    label: 'Routine · 6 riquadri',
+    kind: 'grid',
+    orientation: 'portrait',
+    group: 'Routine',
+    // 2 colonne × 3 righe: su A4 verticale le vignette vengono molto più grandi che in 3 × 2
+    cols: 2,
+    rows: 3,
+    numbered: true,
+    textMm: 6,
+    defaultTitle: 'La mia routine',
+  },
+  'routine-9': {
+    id: 'routine-9',
+    label: 'Routine · 9 riquadri',
+    kind: 'grid',
+    orientation: 'portrait',
+    group: 'Routine',
+    cols: 3,
+    rows: 3,
+    numbered: true,
+    textMm: 5,
+    defaultTitle: 'La mia routine',
+  },
   'routine-12': {
     id: 'routine-12',
     label: 'Routine · 12 riquadri',
+    kind: 'grid',
+    orientation: 'portrait',
     group: 'Routine',
     cols: 3,
     rows: 4,
@@ -31,6 +62,8 @@ export const templates: Record<TemplateId, Template> = {
   },
   'prima-poi': {
     id: 'prima-poi',
+    kind: 'grid',
+    orientation: 'portrait',
     label: 'Prima / Poi',
     group: 'Prima / Poi',
     cols: 1,
@@ -43,6 +76,8 @@ export const templates: Record<TemplateId, Template> = {
   },
   'scelte-2': {
     id: 'scelte-2',
+    kind: 'grid',
+    orientation: 'portrait',
     label: 'Scelte · 2',
     group: 'Scelte',
     cols: 1,
@@ -53,6 +88,8 @@ export const templates: Record<TemplateId, Template> = {
   },
   'scelte-3': {
     id: 'scelte-3',
+    kind: 'grid',
+    orientation: 'portrait',
     label: 'Scelte · 3',
     group: 'Scelte',
     cols: 1,
@@ -63,6 +100,8 @@ export const templates: Record<TemplateId, Template> = {
   },
   'scelte-4': {
     id: 'scelte-4',
+    kind: 'grid',
+    orientation: 'portrait',
     label: 'Scelte · 4',
     group: 'Scelte',
     cols: 2,
@@ -70,6 +109,18 @@ export const templates: Record<TemplateId, Template> = {
     numbered: false,
     textMm: 6,
     defaultTitle: 'Le mie scelte',
+  },
+  gettoni: {
+    id: 'gettoni',
+    label: 'Tabella a gettoni',
+    kind: 'tokens',
+    orientation: 'landscape',
+    group: 'Tabella a gettoni',
+    cols: 1,
+    rows: 3,
+    numbered: false,
+    textMm: 4.5,
+    defaultTitle: 'Le mie stelline',
   },
 }
 
@@ -120,6 +171,8 @@ export function createSheet(template: TemplateId = 'routine-12', childName = '')
     childName,
     cells: Array.from({ length: t.cols * t.rows }, emptyCell),
     remember: { enabled: false, lines: ['', '', ''] },
+    reward: { code: null, text: null },
+    cutouts: false,
     folderId: null,
     status: 'da-fare',
     notes: '',
