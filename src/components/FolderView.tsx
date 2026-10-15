@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { statuses } from '../lib/sheet'
 import type { Folder, Sheet, SheetStatus } from '../types'
+import { Page, SectionHeader } from './AppShell'
 import { FolderNameDialog } from './FoldersView'
 import { SheetCard } from './SheetCard'
 import { Button, NotesField } from './ui'
@@ -27,31 +28,30 @@ export function FolderView({ folder, sheets, onBack, onRename, onNotes, onDelete
     .filter((g) => g.sheets.length > 0)
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <button onClick={onBack} className="self-start text-sm font-bold text-muted hover:text-ink">
-            ← Tutte le cartelle
-          </button>
-          <h2 className="text-2xl font-bold">{folder.name}</h2>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button tone="primary" onClick={onNewSheet}>
-            + Nuova scheda
-          </Button>
-          <Button onClick={() => setRenaming(true)}>Rinomina</Button>
-          <Button
-            tone="danger"
-            onClick={() => {
-              const n = sheets.length
-              const what = n === 0 ? '' : n === 1 ? ' e la sua scheda' : ` e le sue ${n} schede`
-              if (confirm(`Eliminare la cartella “${folder.name}”${what}? Non si può annullare.`)) onDelete()
-            }}
-          >
-            Elimina cartella
-          </Button>
-        </div>
-      </div>
+    <Page>
+      <SectionHeader
+        title={folder.name}
+        subtitle={`${sheets.length} ${sheets.length === 1 ? 'scheda' : 'schede'}`}
+        onBack={onBack}
+        actions={
+          <>
+            <Button tone="primary" onClick={onNewSheet}>
+              + Nuova scheda
+            </Button>
+            <Button onClick={() => setRenaming(true)}>Rinomina</Button>
+            <Button
+              tone="danger"
+              onClick={() => {
+                const n = sheets.length
+                const what = n === 0 ? '' : n === 1 ? ' e la sua scheda' : ` e le sue ${n} schede`
+                if (confirm(`Eliminare la cartella “${folder.name}”${what}? Non si può annullare.`)) onDelete()
+              }}
+            >
+              Elimina cartella
+            </Button>
+          </>
+        }
+      />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem] lg:items-start">
         <div className="flex flex-col gap-6">
@@ -90,7 +90,7 @@ export function FolderView({ folder, sheets, onBack, onRename, onNotes, onDelete
           ))}
         </div>
 
-        <aside className="rounded-3xl bg-white p-5 shadow-sm">
+        <aside className="rounded-3xl bg-white p-6 shadow-sm">
           <NotesField value={folder.notes} onChange={onNotes} />
         </aside>
       </div>
@@ -107,6 +107,6 @@ export function FolderView({ folder, sheets, onBack, onRename, onNotes, onDelete
           onClose={() => setRenaming(false)}
         />
       )}
-    </div>
+    </Page>
   )
 }

@@ -8,9 +8,11 @@ interface Props {
   /** Se assente il personaggio è fisso (es. scelta per un riquadro della scheda) */
   onCharacterChange?: (c: Character) => void
   onPick: (scene: Scene) => void
+  /** Sezione Libreria: ricerca e filtri in una barra fissa in alto */
+  stickyBar?: boolean
 }
 
-export function Library({ character, onCharacterChange, onPick }: Props) {
+export function Library({ character, onCharacterChange, onPick, stickyBar }: Props) {
   const [query, setQuery] = useState('')
   const [block, setBlock] = useState<string | null>(null)
   const [setting, setSetting] = useState<string | null>(null)
@@ -23,15 +25,19 @@ export function Library({ character, onCharacterChange, onPick }: Props) {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-col gap-3">
+      <div
+        className={`flex flex-col gap-3 ${
+          stickyBar ? 'sticky top-0 z-20 -mx-4 border-b border-line/60 bg-cream/95 px-4 py-4 backdrop-blur sm:-mx-8 sm:px-8' : ''
+        }`}
+      >
         <div className="flex flex-wrap items-center gap-3">
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Cerca: denti, colazione, scuola…"
-            className="min-w-0 flex-1 rounded-full border border-line bg-white px-5 py-2.5 outline-none focus:border-sky"
-            autoFocus
+            className="min-w-0 flex-1 rounded-full border border-line bg-white px-5 py-2.5 outline-none focus:border-accent"
+            autoFocus={!stickyBar}
           />
           {onCharacterChange && <CharacterToggle value={character} onChange={onCharacterChange} />}
         </div>
@@ -82,7 +88,7 @@ export function Library({ character, onCharacterChange, onPick }: Props) {
             <li key={scene.code}>
               <button
                 onClick={() => onPick(scene)}
-                className="group flex h-full w-full flex-col overflow-hidden rounded-3xl border border-line bg-white text-left transition hover:-translate-y-0.5 hover:border-sky hover:shadow-md"
+                className="group flex h-full w-full flex-col overflow-hidden rounded-3xl bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
               >
                 <img
                   src={sceneThumb(scene.code, character)}
@@ -119,7 +125,7 @@ function Chip({
       onClick={onClick}
       aria-pressed={active}
       className={`rounded-full border font-bold transition ${small ? 'px-3 py-1 text-xs' : 'px-4 py-1.5 text-sm'} ${
-        active ? 'border-sky bg-sky-soft text-ink' : 'border-line bg-white text-muted hover:text-ink'
+        active ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-white text-muted hover:text-ink'
       }`}
     >
       {children}

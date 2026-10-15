@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { templateList } from '../lib/sheet'
-import type { CellSymbol, Folder, TemplateId } from '../types'
+import type { CellSymbol, Folder } from '../types'
 import { Modal } from './Modal'
 import { SymbolIcon, cornerOptions, symbolOptions } from './SymbolIcon'
 import { Button, NameInput } from './ui'
@@ -14,6 +13,7 @@ export function FolderPicker({
   confirmLabel,
   folders,
   initialFolderId,
+  allowDraft,
   onConfirm,
   onClose,
 }: {
@@ -21,10 +21,12 @@ export function FolderPicker({
   confirmLabel: string
   folders: Folder[]
   initialFolderId?: string | null
-  onConfirm: (choice: { folderId: string } | { newName: string }) => void
+  /** Aggiunge la scelta "Bozza": la scheda non va in nessuna cartella per ora */
+  allowDraft?: boolean
+  onConfirm: (choice: { folderId: string } | { newName: string } | { draft: true }) => void
   onClose: () => void
 }) {
-  const [selected, setSelected] = useState<string>(initialFolderId ?? folders[0]?.id ?? 'new')
+  const [selected, setSelected] = useState<string>(initialFolderId ?? folders[0]?.id ?? (allowDraft ? 'draft' : 'new'))
   const [newName, setNewName] = useState('')
   const canConfirm = selected !== 'new' || newName.trim() !== ''
 
@@ -35,7 +37,9 @@ export function FolderPicker({
         onSubmit={(e) => {
           e.preventDefault()
           if (!canConfirm) return
-          onConfirm(selected === 'new' ? { newName: newName.trim() } : { folderId: selected })
+          onConfirm(
+            selected === 'new' ? { newName: newName.trim() } : selected === 'draft' ? { draft: true } : { folderId: selected },
+          )
         }}
       >
         <fieldset className="flex flex-col gap-2">
@@ -44,6 +48,9 @@ export function FolderPicker({
             <OptionRow key={f.id} checked={selected === f.id} onSelect={() => setSelected(f.id)} label={f.name} />
           ))}
           <OptionRow checked={selected === 'new'} onSelect={() => setSelected('new')} label="+ Nuova cartella" />
+          {allowDraft && (
+            <OptionRow checked={selected === 'draft'} onSelect={() => setSelected('draft')} label="Bozza (decido dopo)" />
+          )}
         </fieldset>
         {selected === 'new' && (
           <NameInput label="Nome della nuova cartella" value={newName} onChange={setNewName} autoFocus />
@@ -71,42 +78,6 @@ function OptionRow({ checked, onSelect, label }: { checked: boolean; onSelect: (
       <input type="radio" checked={checked} onChange={onSelect} className="accent-sky" />
       {label}
     </label>
-  )
-}
-
-/** Scelta del modello per una nuova scheda. */
-export function TemplatePicker({ onPick, onClose }: { onPick: (id: TemplateId) => void; onClose: () => void }) {
-  return (
-    <Modal title="Che tipo di scheda?" onClose={onClose} size="sm">
-      <ul className="grid grid-cols-2 gap-3">
-        {templateList.map((t) => (
-          <li key={t.id}>
-            <button
-              onClick={() => onPick(t.id)}
-              className="flex h-full w-full flex-col items-center gap-2 rounded-2xl border border-line bg-white p-4 font-bold transition hover:border-sky hover:bg-sky-soft"
-            >
-              <TemplateGlyph cols={t.cols} rows={t.rows} arrows={t.arrows} />
-              {t.label}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </Modal>
-  )
-}
-
-/** Schizzo della griglia del modello. */
-function TemplateGlyph({ cols, rows, arrows }: { cols: number; rows: number; arrows?: boolean }) {
-  return (
-    <div
-      className="grid h-16 w-12 gap-0.5 rounded-md border border-line bg-cream p-1"
-      style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, gridTemplateRows: `repeat(${rows}, 1fr)`, rowGap: arrows ? 6 : undefined }}
-      aria-hidden="true"
-    >
-      {Array.from({ length: cols * rows }, (_, i) => (
-        <span key={i} className="rounded-sm bg-sky/40" />
-      ))}
-    </div>
   )
 }
 

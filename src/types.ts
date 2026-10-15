@@ -79,6 +79,8 @@ export interface Sheet {
   reminder: Reminder | null
   createdAt: number
   updatedAt: number
+  /** Ultima apertura nell'editor (sezione Oggi → "Aperte di recente") */
+  openedAt?: number
 }
 
 /** Cartella di un bambino */

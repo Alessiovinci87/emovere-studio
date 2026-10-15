@@ -22,7 +22,7 @@ export function Field({ label, children }: { label: string; children: ReactNode 
 }
 
 export const inputClass =
-  'w-full rounded-2xl border border-line bg-white px-4 py-2 outline-none focus:border-sky placeholder:text-[#bdb5c4]'
+  'w-full rounded-2xl border border-line bg-white px-4 py-2 outline-none focus:border-accent placeholder:text-[#bdb5c4]'
 
 /** Campo di testo per nomi (cartella, bambino) con l'avviso privacy. */
 export function NameInput({
@@ -78,8 +78,8 @@ export function NotesField({ value, onChange }: { value: string; onChange: (valu
 type ButtonTone = 'primary' | 'soft' | 'ghost' | 'danger'
 
 const tones: Record<ButtonTone, string> = {
-  primary: 'bg-ink text-white hover:bg-ink/85',
-  soft: 'bg-sky-soft text-ink hover:bg-sky/25',
+  primary: 'bg-accent text-white hover:bg-accent/90',
+  soft: 'bg-accent-soft text-accent hover:bg-accent/15',
   ghost: 'border border-line text-muted hover:bg-sand hover:text-ink',
   danger: 'border border-[#efc9bf] text-[#b5513a] hover:bg-peach-soft',
 }

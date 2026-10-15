@@ -21,7 +21,7 @@ export function SheetCard({ sheet, onOpen, onStatus, onDuplicate, onMove, onDele
   const reminder = sheet.reminder && !sheet.reminder.done ? sheet.reminder : null
 
   return (
-    <article className="flex flex-col gap-3 rounded-3xl border border-line bg-white p-4">
+    <article className="flex flex-col gap-3 rounded-3xl bg-white p-5 shadow-sm">
       <button onClick={onOpen} className="group flex gap-3 text-left" aria-label={`Apri ${sheet.title || 'scheda'}`}>
         <div className={`grid h-16 w-16 shrink-0 gap-0.5 overflow-hidden rounded-xl bg-sand ${thumbs.length === 4 ? 'grid-cols-2' : ''}`}>
           {thumbs.map((c) => (

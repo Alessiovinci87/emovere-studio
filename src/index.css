@@ -14,6 +14,9 @@
   --color-peach: #f4a78f;
   --color-peach-soft: #fdebe4;
   --color-butter: #fff6d9;
+  /* Unico colore di accento dell'interfaccia: pulsanti principali, voce attiva, badge, focus */
+  --color-accent: #3f74b8;
+  --color-accent-soft: #e6eef9;
 }
 
 body {

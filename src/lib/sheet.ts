@@ -13,6 +13,8 @@ export interface Template {
   cellLabels?: string[]
   /** Freccia tra un riquadro e il successivo (Prima → Poi) */
   arrows?: boolean
+  /** Una riga per la galleria "Crea" */
+  description: string
   /** Corpo della frase sotto la vignetta, in mm */
   textMm: number
   defaultTitle: string
@@ -21,6 +23,7 @@ export interface Template {
 export const templates: Record<TemplateId, Template> = {
   'routine-6': {
     id: 'routine-6',
+    description: 'Pochi passaggi grandi, numerati: ideale per iniziare.',
     label: 'Routine · 6 riquadri',
     group: 'Routine',
     // 2 colonne × 3 righe: su A4 verticale le vignette vengono molto più grandi che in 3 × 2
@@ -32,6 +35,7 @@ export const templates: Record<TemplateId, Template> = {
   },
   'routine-9': {
     id: 'routine-9',
+    description: 'Una routine media, numerata, con orari facoltativi.',
     label: 'Routine · 9 riquadri',
     group: 'Routine',
     cols: 3,
@@ -42,6 +46,7 @@ export const templates: Record<TemplateId, Template> = {
   },
   'routine-12': {
     id: 'routine-12',
+    description: 'La giornata o una routine lunga, passo dopo passo.',
     label: 'Routine · 12 riquadri',
     group: 'Routine',
     cols: 3,
@@ -52,6 +57,7 @@ export const templates: Record<TemplateId, Template> = {
   },
   'prima-poi': {
     id: 'prima-poi',
+    description: 'Due vignette grandi: prima questo, poi quello.',
     label: 'Prima / Poi',
     group: 'Prima / Poi',
     cols: 1,
@@ -64,6 +70,7 @@ export const templates: Record<TemplateId, Template> = {
   },
   'scelte-2': {
     id: 'scelte-2',
+    description: 'Due possibilità tra cui scegliere.',
     label: 'Scelte · 2',
     group: 'Scelte',
     cols: 1,
@@ -74,6 +81,7 @@ export const templates: Record<TemplateId, Template> = {
   },
   'scelte-3': {
     id: 'scelte-3',
+    description: 'Tre possibilità tra cui scegliere.',
     label: 'Scelte · 3',
     group: 'Scelte',
     cols: 1,
@@ -84,6 +92,7 @@ export const templates: Record<TemplateId, Template> = {
   },
   'scelte-4': {
     id: 'scelte-4',
+    description: 'Quattro possibilità in una griglia 2 × 2.',
     label: 'Scelte · 4',
     group: 'Scelte',
     cols: 2,

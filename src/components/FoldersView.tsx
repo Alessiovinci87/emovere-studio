@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { countByStatus } from '../lib/store'
 import type { Folder, Sheet } from '../types'
-import { BackupPanel } from './BackupPanel'
+import { Page, SectionHeader } from './AppShell'
 import { Modal } from './Modal'
 import { StatusCounts } from './Status'
 import { Button, NameInput } from './ui'
@@ -11,23 +11,24 @@ interface Props {
   sheets: Sheet[]
   onOpenFolder: (id: string) => void
   onCreateFolder: (name: string) => void
-  onExportBackup: () => void
-  onImportBackup: (file: File) => void
 }
 
 /** Schermata principale: le cartelle dei bambini con i contatori per stato. */
-export function FoldersView({ folders, sheets, onOpenFolder, onCreateFolder, onExportBackup, onImportBackup }: Props) {
+export function FoldersView({ folders, sheets, onOpenFolder, onCreateFolder }: Props) {
   const [creating, setCreating] = useState(false)
   const sorted = [...folders].sort((a, b) => a.name.localeCompare(b.name, 'it'))
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-2xl font-bold">Cartelle</h2>
-        <Button tone="primary" onClick={() => setCreating(true)}>
-          + Nuova cartella
-        </Button>
-      </div>
+    <Page>
+      <SectionHeader
+        title="Bambini"
+        subtitle="Una cartella per ogni bambino, con le sue schede."
+        actions={
+          <Button tone="primary" onClick={() => setCreating(true)}>
+            + Nuova cartella
+          </Button>
+        }
+      />
 
       {sorted.length === 0 ? (
         <div className="rounded-3xl bg-sand/60 px-6 py-12 text-center text-muted">
@@ -41,7 +42,7 @@ export function FoldersView({ folders, sheets, onOpenFolder, onCreateFolder, onE
               <li key={folder.id}>
                 <button
                   onClick={() => onOpenFolder(folder.id)}
-                  className="flex h-full w-full flex-col gap-3 rounded-3xl border border-line bg-white p-5 text-left transition hover:-translate-y-0.5 hover:border-sky hover:shadow-md"
+                  className="flex h-full w-full flex-col gap-3 rounded-3xl bg-white p-6 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
                 >
                   <span className="flex items-baseline justify-between gap-2">
                     <span className="text-lg font-bold">📁 {folder.name}</span>
@@ -57,8 +58,6 @@ export function FoldersView({ folders, sheets, onOpenFolder, onCreateFolder, onE
         </ul>
       )}
 
-      <BackupPanel onExport={onExportBackup} onImport={onImportBackup} />
-
       {creating && (
         <FolderNameDialog
           title="Nuova cartella"
@@ -71,7 +70,7 @@ export function FoldersView({ folders, sheets, onOpenFolder, onCreateFolder, onE
           onClose={() => setCreating(false)}
         />
       )}
-    </div>
+    </Page>
   )
 }
 

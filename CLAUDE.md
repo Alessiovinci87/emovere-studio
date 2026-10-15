@@ -31,6 +31,18 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
 - Ogni nuovo campo di testo libero riferito a un bambino deve mostrare lo stesso avviso
 - Nessun dato lascia il browser, tranne i file che l'utente scarica (PDF, .ics, backup). I nomi dei file .ics e di backup non contengono nomi di bambini
 
+## Interfaccia (struttura da app)
+- 5 sezioni, ognuna con il suo URL e un titolo in alto (`SectionHeader`): **Oggi** (`/oggi`, schermata iniziale), **Bambini** (`/bambini`, `/bambini/{id}`), **Crea** (`/crea`, `/crea?cartella={id}`), **Libreria** (`/libreria`), **Impostazioni** (`/impostazioni`). Editor: `/scheda/{id}` o `/scheda/bozza`
+- Router senza librerie in `src/lib/router.ts` (History API): funzionano Indietro dell'app, del browser e il gesto su tablet/telefono; dopo una ricarica si resta sulla stessa schermata. `vercel.json` rimanda tutti gli URL (tranne `/api/`) a `index.html`
+- Navigazione (`AppShell`): desktop ≥ 1024 px barra laterale fissa a sinistra; tablet e telefono barra fissa in basso. Icone + nomi, aree touch ≥ 44 px, badge su "Oggi" con promemoria + backup
+- Oggi: "Da fare" (promemoria di oggi e scaduti + "Fai un backup"), schede "In lavorazione", ultime 6 schede aperte (`sheet.openedAt`)
+- Bambini: cartelle in card con contatori per stato; dentro, schede raggruppate per stato e appunti della cartella
+- Crea: galleria dei modelli con anteprima e descrizione; scelto il modello si sceglie la cartella (anche nuova) o "Bozza", poi si apre l'editor
+- Libreria: ricerca e filtri in una barra fissa in alto; toccare una vignetta la aggiunge al primo riquadro vuoto dell'ultima scheda aperta
+- Impostazioni: esporta/importa backup, data dell'ultimo backup, privacy, versione (da `package.json`, `__APP_VERSION__`)
+- Editor a schermo intero (`src/components/Editor.tsx`, la navigazione si nasconde): barra in alto con Indietro/Fatto, titolo, stato, bambina/bambino, Salva (bozza), menu Esporta (PDF stampa, PDF WhatsApp e, con il cerchietto, stelline); pannello opzioni a sinistra richiudibile (su telefono sale dal basso, con stato e personaggio); foglio al centro adattato allo schermo, zoom −/+/Adatta
+- Stile: sfondo crema, card bianche con angoli arrotondati e ombra leggera, molto spazio. **Un solo colore di accento** (`--color-accent`, blu `#3f74b8`, e `accent-soft`) per pulsanti principali, voce attiva, badge e focus. I colori di stati e passaggi sono contenuto, non accento
+
 ## Funzioni del prototipo
 1. **Libreria**: griglia di vignette, ricerca testuale su titolo e tag (case-insensitive, senza accenti), filtri per blocco, ambiente e personaggio.
 2. **Composer scheda**:
@@ -51,10 +63,10 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
    - Schermata principale: elenco cartelle con contatori per stato; dentro la cartella, schede raggruppate per stato
    - Schede: salva (una scheda nuova è una bozza finché non la si salva in una cartella; dopo, le modifiche si salvano da sole), apri, duplica (anche in un'altra cartella), sposta, elimina, appunti
    - Stato: Da fare, In lavorazione, Pronta, Stampata/Consegnata. Nella cartella un clic sull'etichetta apre un menu con i 4 stati; nel composer si sceglie direttamente
-   - Promemoria: una data e un tipo (Creare, Stampare, Consegnare, Rivedere) per scheda. All'apertura, se ci sono promemoria di oggi o scaduti non fatti, si apre il pannello "Da fare"; il menu mostra un badge con il numero. "Aggiungi al calendario" scarica un .ics (evento di un giorno, avviso alle 9)
-   - Backup: "Esporta tutto" (JSON con cartelle e schede, non la bozza) e "Importa backup" (sostituisce tutto, dopo conferma). La data dell'ultimo export è in localStorage (`emovere.lastBackup.v1`): se ci sono schede salvate e il backup manca o ha più di 7 giorni, il pannello "Da fare" mostra "Fai un backup" con il pulsante diretto (conta nel badge)
+   - Promemoria: una data e un tipo (Creare, Stampare, Consegnare, Rivedere) per scheda. Quelli di oggi e scaduti non fatti compaiono in "Da fare" nella sezione Oggi (schermata iniziale), con badge sulla voce "Oggi". "Aggiungi al calendario" scarica un .ics (evento di un giorno, avviso alle 9)
+   - Backup: "Esporta tutto" (JSON con cartelle e schede, non la bozza) e "Importa backup" (sostituisce tutto, dopo conferma). La data dell'ultimo export è in localStorage (`emovere.lastBackup.v1`): se ci sono schede salvate e il backup manca o ha più di 7 giorni, "Da fare" (sezione Oggi) mostra "Fai un backup" con il pulsante diretto (conta nel badge)
    - Dopo il PDF di una bozza non salvata si propone di salvarla in una cartella ("No, grazie" non la ripropone per quella bozza)
-   - Navigazione: tasti "Home" (cartelle) e "← Indietro" nell'intestazione, anche il logo porta alla home. Le schermate sono voci della cronologia del browser, quindi funzionano anche il tasto indietro del browser e il gesto indietro su tablet/telefono; dopo una ricarica si resta sulla stessa schermata
+   - Navigazione: vedi "Interfaccia"
    - Dati in `src/lib/store.ts` (operazioni pure `StoreData → StoreData`); le schede salvate con versioni precedenti vengono completate da `normalizeSheet`
 5. **Export**: "PDF stampa" (A4, 300 dpi, margini 10 mm, pronto da plastificare) e "PDF WhatsApp" (immagini compresse, file leggero).
 
