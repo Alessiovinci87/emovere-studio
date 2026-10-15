@@ -181,6 +181,60 @@
       "objects": ["asciugamano", "lavandino"],
       "tags": ["igiene", "mani", "asciugare", "pulizia", "bagno"],
       "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "B05", "block": "B",
+      "title_f": "Metto il dentifricio", "title_m": "Metto il dentifricio",
+      "setting": "bagno", "outfit": "pigiama",
+      "actions": ["lavarsi i denti", "mettere il dentifricio"],
+      "objects": ["spazzolino", "dentifricio", "lavandino"],
+      "tags": ["igiene", "denti", "sera", "bagno", "routine"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "B06", "block": "B",
+      "title_f": "Spazzolo i denti", "title_m": "Spazzolo i denti",
+      "setting": "bagno", "outfit": "pigiama",
+      "actions": ["lavarsi i denti", "spazzolare"],
+      "objects": ["spazzolino", "specchio", "lavandino"],
+      "tags": ["igiene", "denti", "sera", "bagno", "routine"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "B07", "block": "B",
+      "title_f": "Sciacquo la bocca", "title_m": "Sciacquo la bocca",
+      "setting": "bagno", "outfit": "pigiama",
+      "actions": ["lavarsi i denti", "sciacquare"],
+      "objects": ["bicchiere", "acqua", "lavandino"],
+      "tags": ["igiene", "denti", "sera", "bagno", "routine"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "B08", "block": "B",
+      "title_f": "Vado in bagno quando mi scappa", "title_m": "Vado in bagno quando mi scappa",
+      "setting": "bagno", "outfit": "casa",
+      "actions": ["andare in bagno", "camminare"],
+      "objects": ["porta", "water"],
+      "tags": ["igiene", "bagno", "water", "autonomia", "controllo sfinterico"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "B09", "block": "B",
+      "title_f": "Tiro lo sciacquone", "title_m": "Tiro lo sciacquone",
+      "setting": "bagno", "outfit": "casa",
+      "actions": ["tirare lo sciacquone"],
+      "objects": ["water", "pulsante"],
+      "tags": ["igiene", "bagno", "water", "autonomia", "controllo sfinterico"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "B10", "block": "B",
+      "title_f": "Faccio il bagnetto", "title_m": "Faccio il bagnetto",
+      "setting": "bagno", "outfit": "accappatoio",
+      "actions": ["fare il bagnetto", "asciugarsi"],
+      "objects": ["vasca", "accappatoio", "paperella", "asciugamano"],
+      "tags": ["igiene", "bagno", "bagnetto", "sera", "routine"],
+      "characters": ["bambina", "bambino"], "adults": []
     }
   ]
 }
