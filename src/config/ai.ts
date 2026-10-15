@@ -9,6 +9,16 @@ export const AI_MODELS = {
   text: 'gpt-6-luna',
 }
 
+/**
+ * Versione da colorare: prompt fisso, la vignetta originale come unica immagine.
+ * Si salva come PNG ("{CODICE}_{personaggio}_colorare.png") e si genera una sola volta per vignetta.
+ */
+export const COLORING_PROMPT =
+  'Convert this illustration into a clean black-and-white coloring page for young children aged 3-8. Keep exactly the same composition, character, pose, objects and setting. Thick, smooth, closed black outlines, pure white fills, no colors, no gray, no shading, no textures. Simplify very small details so every area is easy to color. No text.'
+
+/** Stima del costo di un'immagine (per la conferma dello script npm run coloring), in dollari */
+export const AI_IMAGE_COST_ESTIMATE = { min: 0.05, max: 0.08 }
+
 export const AI_IMAGE = {
   size: '1024x1024',
   quality: 'medium',

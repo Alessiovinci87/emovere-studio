@@ -9,7 +9,8 @@
     "dev": "vite",
     "prebuild": "npm run images",
     "build": "tsc -b && tsc -p tsconfig.api.json && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "coloring": "node scripts/coloring.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

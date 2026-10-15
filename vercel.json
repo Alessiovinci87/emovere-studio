@@ -13,6 +13,9 @@
     "api/generate.ts": {
       "maxDuration": 300,
       "includeFiles": "public/library/refs/**"
+    },
+    "api/coloring.ts": {
+      "maxDuration": 300
     }
   }
 }

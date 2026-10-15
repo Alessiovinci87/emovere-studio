@@ -4,7 +4,7 @@
 //   bambina/X001_bambina.webp, bambino/X001_bambino.webp   immagini generate
 //   index.json                                             voci della libreria AI (si uniscono a catalog.json)
 //   usage.json                                             contatore delle immagini generate oggi
-import { del, get, put } from '@vercel/blob'
+import { del, get, list, put } from '@vercel/blob'
 import type { AiLimitPeriod } from '../../src/config/ai.js'
 import type { Scene } from '../../src/types.js'
 
@@ -82,6 +82,35 @@ export async function putImage(pathname: string, bytes: Uint8Array): Promise<voi
     addRandomSuffix: false,
     allowOverwrite: false,
     contentType: 'image/webp',
+  })
+}
+
+/** Versione da colorare: coloring/A01_bambina_colorare.png */
+export function coloringPath(code: string, character: 'bambina' | 'bambino'): string {
+  return `coloring/${code}_${character}_colorare.png`
+}
+
+/** Chiavi "A01_bambina" delle versioni da colorare già salvate (elenco completo, a pagine). */
+export async function listColoringKeys(): Promise<string[]> {
+  const keys: string[] = []
+  let cursor: string | undefined
+  do {
+    const page = await list({ prefix: 'coloring/', cursor, limit: 1000 })
+    for (const blob of page.blobs) {
+      const match = blob.pathname.match(/^coloring\/(.+)_colorare\.png$/)
+      if (match) keys.push(match[1])
+    }
+    cursor = page.hasMore ? page.cursor : undefined
+  } while (cursor)
+  return keys
+}
+
+export async function putPng(pathname: string, bytes: Uint8Array): Promise<void> {
+  await put(pathname, Buffer.from(bytes), {
+    access: 'private',
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: 'image/png',
   })
 }
 

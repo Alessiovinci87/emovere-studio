@@ -78,12 +78,17 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
 ## Funzioni del prototipo
 1. **Libreria**: griglia di vignette, ricerca testuale su titolo e tag (case-insensitive, senza accenti), filtri per blocco, ambiente e personaggio.
 2. **Composer scheda**:
-   - Template disponibili: Routine 6 (2 colonne × 3 righe: in 3 × 2 su A4 verticale le vignette verrebbero troppo piccole), Routine 9 (3×3), Routine 12 (3×4), Prima/Poi (2 riquadri grandi uno sotto l'altro con freccia ↓), Scelte 2 e 3 (in colonna) e 4 (2×2). Tutti in A4 verticale. Previsti: Storia sociale (4, 6). Definiti in `templates` (`src/lib/sheet.ts`)
+   - Template disponibili, definiti in `templates` (`src/lib/sheet.ts`) con `orientation` (verticale/orizzontale), `layout` (`grid`, `stack`, `sequence`, `agenda`) e `defaultText` (frase iniziale = titolo della scena, o vuota):
+     - A4 verticale: Routine 4 (2×2, sequenze brevi), Routine 6 (2 colonne × 3 righe: in 3 × 2 le vignette verrebbero troppo piccole), Routine 9 (3×3), Routine 12 (3×4), Prima/Poi (2 riquadri uno sotto l'altro con freccia ↓), Scelte 2 e 3 (in colonna) e 4 (2×2)
+     - A4 orizzontale: Prima – Adesso – Dopo (3 riquadri affiancati con frecce, etichette PRIMA/ADESSO/DOPO, ADESSO con bordo più spesso) e Agenda della settimana (vedi sotto)
+     - Previsti: Storia sociale (4, 6)
+   - "Ricordo sempre" solo nei modelli verticali
    - Il modello si sceglie alla creazione e si può cambiare nel composer (conferma se si perdono vignette)
    - Titolo e sottotitolo modificabili
    - Click su un riquadro vuoto → si apre la libreria → la vignetta scelta entra nel riquadro
    - Sotto ogni vignetta: frase modificabile (default = titolo della scena per il personaggio scelto)
-   - Numero grande nel riquadro (routine), orario opzionale per riquadro
+   - Numero grande nel riquadro (routine), orario opzionale per riquadro. "Orario come" per scheda: Analogico, Digitale, Entrambi (default). Analogico = orologio SVG con numeri 12-3-6-9 e lancette posizionate correttamente (7:45 → ore tra 7 e 8), sotto il numero, anche nel PDF. Orari riconosciuti: "7:45", "7.45", "7"
+   - Stampatello maiuscolo per scheda (titolo, sottotitolo, frasi, Ricordo sempre), solo visualizzazione con `text-transform`: il testo salvato non cambia. Il valore iniziale delle nuove schede si sceglie in Impostazioni
    - Riordino riquadri con drag and drop (su touch: tieni premuto e trascina)
    - Comandi del riquadro pieno (Cambia, Simbolo, Svuota): su desktop compaiono con l'hover; su schermi touch (`pointer: coarse`) un tocco seleziona il riquadro e mostra la barra con pulsanti più grandi, un tocco fuori la chiude. I pulsanti nascosti non sono mai cliccabili (`pointer-events: none`)
    - Riquadro finale opzionale "Ricordo sempre" con 3 frasi modificabili
@@ -102,6 +107,39 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
    - Dati in `src/lib/store.ts` (operazioni pure `StoreData → StoreData`); le schede salvate con versioni precedenti vengono completate da `normalizeSheet`
 5. **Export**: "PDF stampa" (A4, 300 dpi, margini 10 mm, pronto da plastificare) e "PDF WhatsApp" (immagini compresse, file leggero).
 
+## Schede pronte
+- `src/data/presets.json`: `id`, `titolo`, `sottotitolo`, `template`, `scene` (codici in ordine), `opzioni` (es. `uppercase`, `doneCircle`, `timeMode`, `coloring`)
+- In Crea, sezione "Pronte da usare" sopra i modelli vuoti; al clic si scelgono personaggio e cartella (o bozza) e si apre l'editor già compilato
+- I titoli con "o/a" si adattano al personaggio ("Pronto/a" → "Pronta"/"Pronto"); con la cartella si aggiunge il nome ("… di Luca")
+- Le schede pronte con codici non presenti nel catalogo (o modello inesistente) non vengono mostrate
+
+## Agenda della settimana
+- A4 orizzontale: colonne Lun–Dom (opzione "Solo Lun–Ven"), righe = momenti della giornata da 1 a 4 (default 3: Mattina, Pomeriggio, Sera; la quarta è Notte), nomi modificabili sul foglio
+- Si conservano sempre 7 × 4 riquadri (`agendaIndex(riga, giorno)`): cambiando giorni o righe le vignette nascoste restano salvate
+- Ogni cella: vignetta dalla libreria e frase breve facoltativa (parte vuota); le celle vuote restano bianche per scrivere a mano
+- Trascinando, due celle si scambiano di posto (gli altri giorni non scorrono). "→ Domani" copia una cella nel giorno dopo; la freccia nell'intestazione del giorno copia l'intera colonna (con conferma se sovrascrive)
+
+## Logo e nome del centro
+- Impostazioni (`src/lib/settings.ts`, localStorage `emovere.settings.v1`): logo PNG/JPG/SVG ridotto a max 600 px e salvato come PNG, nome del centro, stampatello predefinito. Inclusi in "Esporta tutto" e "Importa backup" (campo `settings`; i backup più vecchi senza impostazioni le lasciano come sono)
+- Per scheda "Mostra logo" (`showLogo`, null = automatico: sì se c'è un logo): piè di pagina sottile nel margine inferiore (logo piccolo + nome, a sinistra), non toglie spazio alle vignette; presente anche nelle pagine di stelline e carte
+
+## Aspetto della pagina
+- `SheetLook` (`src/lib/look.ts`) raccoglie stampatello, orario, versione da colorare, piè di pagina e immagini; è passato esplicitamente all'export (che disegna fuori dall'app) e distribuito ai componenti con `SheetLookContext`
+
+## Carte da ritagliare
+- Menu Esporta → "Carte da ritagliare…": le vignette della scheda (in ordine, con la frase o il titolo della scena) come carte singole su A4 verticale, bordo arrotondato sottile e linee di taglio tratteggiate; rispettano stampatello e versione da colorare
+- Misure: piccola 5 cm (12 per pagina), media 7 cm (6, default), grande 9 cm (4); oltre, il PDF continua sulle pagine successive (`src/components/Cards.tsx`)
+- "Aggiungi striscia agenda": caselle vuote della stessa misura delle carte (una per carta, numerate), in colonna, e in fondo "FINITO" più grande, per agende con velcro
+- Stampa o WhatsApp. Nome file `{titolo}_carte.pdf` (WhatsApp `{titolo}_carte_whatsapp.pdf`)
+
+## Versione da colorare
+- Interruttore per scheda (`coloring`) nell'editor e nel menu Esporta: scheda, PDF e carte usano le vignette a contorno; numeri, cornici, etichette, simboli, cerchietto, frecce e Ricordo sempre diventano in bianco e nero (risparmio di inchiostro)
+- Le versioni si generano una sola volta per vignetta e personaggio e si riusano: Blob privato `coloring/{CODICE}_{personaggio}_colorare.png`, servite da `/api/image`
+- `/api/coloring` (stessa password e stesse variabili delle funzioni AI): `GET` elenco, `POST { code, character, image? }` → endpoint di modifica immagini con il prompt fisso `COLORING_PROMPT` (`src/config/ai.ts`), PNG. Per il catalogo disegnato l'app invia la vignetta WebP; per le vignette AI il server la legge dal Blob. Ogni immagine conta nel limite
+- Editor: se mancano versioni per la scheda (personaggio attuale) compare l'avviso con "Genera quelle mancanti (N immagini)", due alla volta con avanzamento; finché mancano, quelle vignette restano a colori
+- Libreria: per le vignette AI, "Crea versione da colorare (2 immagini)" (bambina e bambino)
+- `npm run coloring` (`scripts/coloring.mjs`): genera le versioni mancanti di tutto il catalogo dai PNG originali, dopo una conferma con numero di immagini e costo stimato (`--yes` per saltarla). Variabili: `OPENAI_API_KEY` (impostarla a mano: su Vercel è "Sensitive") e `BLOB_READ_WRITE_TOKEN` (`npx vercel env pull --environment=production .env.local`). Non conta nel limite dell'app
+
 ## Stellina "fatto" (cerchietto per il velcro)
 - Interruttore "Cerchietto per la stellina" su tutte le schede (`sheet.doneCircle`): un cerchietto tratteggiato da 2 cm sull'angolo in alto a destra di ogni vignetta piena, dove si incolla un dischetto di velcro e il bambino attacca la stellina quando ha fatto l'azione
 - Misure in `src/lib/stars.ts` (diametro `CIRCLE` = 20 mm, adatto ai dischetti di velcro comuni 19-22 mm); disegno in `src/components/Stars.tsx`
@@ -115,7 +153,7 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
 - PDF stampa: 300 dpi, PNG originali, immagine della pagina in PNG senza perdita
 - PDF WhatsApp: 150 dpi, WebP, pagina in JPEG; la qualità scende finché il file resta sotto 2 MB
 - Nome file: titolo senza accenti, spazi → trattini, + personaggio; WhatsApp aggiunge `_whatsapp`. Es. `La-mia-mattina_bambina.pdf`, `La-mia-mattina_bambina_whatsapp.pdf`. Solo stelline: `{titolo}_stelline.pdf` (WhatsApp `{titolo}_stelline_whatsapp.pdf`)
-- Un PDF può avere più pagine (scheda + stelline da ritagliare); ogni pagina è un'immagine a 300 dpi (stampa) o 150 dpi (WhatsApp, limite 2 MB sul file intero)
+- Un PDF può avere più pagine con orientamento diverso (scheda orizzontale + stelline verticali, carte su più pagine); ogni pagina è un'immagine a 300 dpi (stampa) o 150 dpi (WhatsApp, limite 2 MB sul file intero)
 
 ## Deploy
 - Vercel, configurazione in `vercel.json`; la build genera le immagini con `sharp`

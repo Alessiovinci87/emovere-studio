@@ -12,6 +12,7 @@ import { Button } from './components/ui'
 import { aiApi } from './lib/ai'
 import { setAiScenes } from './lib/catalog'
 import { downloadBlob } from './lib/download'
+import { fetchColoringKeys, requestColoring } from './lib/coloring'
 import { coloringKey } from './lib/look'
 import { sheetFromPreset, type Preset } from './lib/presets'
 import { loadSettings, saveSettings, type AppSettings } from './lib/settings'
@@ -59,6 +60,7 @@ export default function App() {
 
   useEffect(() => {
     aiApi.scenes().then(applyAiScenes)
+    fetchColoringKeys().then(setColoringKeys)
   }, [applyAiScenes])
 
   useEffect(() => {
@@ -254,10 +256,45 @@ Non si può annullare.`)) return
     return [...codes].filter((code) => !coloringKeys.has(coloringKey(code, target.character)))
   }
 
-  async function generateColoring(target: Sheet) {
-    void target
+  /** Genera le versioni da colorare mancanti (due alla volta), con avanzamento; si ferma al primo errore. */
+  async function makeColoring(items: { code: string; character: Character }[]): Promise<string | null> {
+    if (items.length === 0 || coloringProgress) return null
+    const total = items.length
+    let done = 0
+    let error: string | null = null
+    const queue = [...items]
+    setColoringProgress({ done, total })
+    await Promise.all(
+      [0, 1].map(async () => {
+        for (let item = queue.shift(); item && !error; item = queue.shift()) {
+          try {
+            const key = await requestColoring(item.code, item.character)
+            setColoringKeys((keys) => new Set(keys).add(key))
+            done++
+            setColoringProgress({ done, total })
+          } catch (err) {
+            error = (err as Error).message
+          }
+        }
+      }),
+    )
     setColoringProgress(null)
-    setColoringKeys((k) => k)
+    if (error) alert(error)
+    return error
+  }
+
+  async function generateColoring(target: Sheet) {
+    const error = await makeColoring(missingColoring(target).map((code) => ({ code, character: target.character })))
+    if (!error) setToast('Versioni da colorare pronte')
+  }
+
+  /** Libreria: versione da colorare di una vignetta AI, bambina e bambino (2 immagini). */
+  async function generateSceneColoring(scene: Scene) {
+    const items = (['bambina', 'bambino'] as const)
+      .filter((c) => !coloringKeys.has(coloringKey(scene.code, c)))
+      .map((character) => ({ code: scene.code, character }))
+    const error = await makeColoring(items)
+    if (!error) setToast(`Versione da colorare di ${scene.code} pronta`)
   }
 
   const closePicker = useCallback(() => setPickTarget(null), [])
@@ -348,6 +385,9 @@ Non si può annullare.`)) return
               onCharacterChange={setLibraryCharacter}
               onPick={addToLastSheet}
               onDeleteAi={deleteAiScene}
+              coloringKeys={coloringKeys}
+              coloringBusy={coloringProgress !== null}
+              onMakeColoring={generateSceneColoring}
               stickyBar
             />
           </Page>

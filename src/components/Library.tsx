@@ -13,9 +13,23 @@ interface Props {
   stickyBar?: boolean
   /** Elimina una vignetta generata con AI (solo nella sezione Libreria) */
   onDeleteAi?: (scene: Scene) => void
+  /** Versioni da colorare già pronte ("A01_bambina") */
+  coloringKeys?: ReadonlySet<string>
+  coloringBusy?: boolean
+  /** Vignette AI: crea la versione da colorare (bambina e bambino) */
+  onMakeColoring?: (scene: Scene) => void
 }
 
-export function Library({ character, onCharacterChange, onPick, stickyBar, onDeleteAi }: Props) {
+export function Library({
+  character,
+  onCharacterChange,
+  onPick,
+  stickyBar,
+  onDeleteAi,
+  coloringKeys,
+  coloringBusy,
+  onMakeColoring,
+}: Props) {
   const [query, setQuery] = useState('')
   const [block, setBlock] = useState<string | null>(null)
   const [setting, setSetting] = useState<string | null>(null)
@@ -88,10 +102,13 @@ export function Library({ character, onCharacterChange, onPick, stickyBar, onDel
       ) : (
         <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {scenes.map((scene) => (
-            <li key={scene.code} className="relative">
+            <li
+              key={scene.code}
+              className="relative flex flex-col overflow-hidden rounded-3xl bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
               <button
                 onClick={() => onPick(scene)}
-                className="group flex h-full w-full flex-col overflow-hidden rounded-3xl bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                className="group flex w-full flex-1 flex-col text-left"
               >
                 <span className="relative block">
                   <img
@@ -111,6 +128,21 @@ export function Library({ character, onCharacterChange, onPick, stickyBar, onDel
                   <span className="text-xs text-muted">{scene.code}</span>
                 </span>
               </button>
+              {scene.ai && onMakeColoring && coloringKeys && (
+                <div className="px-4 pb-3">
+                  {coloringKeys.has(`${scene.code}_bambina`) && coloringKeys.has(`${scene.code}_bambino`) ? (
+                    <span className="text-xs font-bold text-[#5d9a5f]">✓ Versione da colorare pronta</span>
+                  ) : (
+                    <button
+                      onClick={() => onMakeColoring(scene)}
+                      disabled={coloringBusy}
+                      className="min-h-9 text-left text-xs font-bold text-accent underline disabled:cursor-wait disabled:opacity-50"
+                    >
+                      {coloringBusy ? 'Creo le versioni da colorare…' : 'Crea versione da colorare (2 immagini)'}
+                    </button>
+                  )}
+                </div>
+              )}
               {scene.ai && onDeleteAi && (
                 <button
                   onClick={() => onDeleteAi(scene)}

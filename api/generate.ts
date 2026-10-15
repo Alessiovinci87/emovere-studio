@@ -4,18 +4,10 @@
 // Protetta dalla password dell'app: middleware.ts la controlla prima di ogni richiesta.
 import { access, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import {
-  AI_ADULTS,
-  AI_LIMIT_DEFAULT,
-  AI_LIMIT_PERIOD_DEFAULT,
-  CHILD_REFS,
-  buildImagePrompt,
-  isAiRequest,
-  type AiAdult,
-  type AiLimitPeriod,
-} from '../src/config/ai.js'
+import { AI_ADULTS, CHILD_REFS, buildImagePrompt, isAiRequest, type AiAdult } from '../src/config/ai.js'
 import { UserError, handle, json } from './_lib/http.js'
 import { describeAction, editImage } from './_lib/openai.js'
+import { checkLimit, limitConfig } from './_lib/limits.js'
 import { addUsage, usedInPeriod } from './_lib/storage.js'
 
 export const config = { maxDuration: 300 }
@@ -23,15 +15,6 @@ export const config = { maxDuration: 300 }
 const REFS_DIR = join(process.cwd(), 'public', 'library', 'refs')
 const IMAGES_PER_SCENE = 2
 
-/** Limite dalle variabili d'ambiente AI_LIMIT e AI_LIMIT_PERIOD (valori non validi → predefiniti). */
-function limitConfig(): { limit: number; period: AiLimitPeriod } {
-  const value = Number(process.env.AI_LIMIT)
-  const period = process.env.AI_LIMIT_PERIOD?.trim().toLowerCase()
-  return {
-    limit: Number.isInteger(value) && value > 0 ? value : AI_LIMIT_DEFAULT,
-    period: period === 'mese' || period === 'giorno' ? period : AI_LIMIT_PERIOD_DEFAULT,
-  }
-}
 
 async function hasRef(name: string): Promise<boolean> {
   try {
@@ -69,15 +52,10 @@ export function POST(request: Request): Promise<Response> {
       throw new UserError('Scrivi in poche parole cosa fa il bambino (massimo 300 caratteri).')
     }
 
-    const { limit, period } = limitConfig()
-    const used = await usedInPeriod(period)
-    if (used + IMAGES_PER_SCENE > limit) {
-      const [what, restart] = period === 'mese' ? ['mensile', 'il primo del mese'] : ['giornaliero', 'domani']
-      throw new UserError(
-        `Limite ${what} raggiunto: ${used} immagini su ${limit} (ogni vignetta ne crea ${IMAGES_PER_SCENE}, bambina e bambino). Si riparte ${restart}.`,
-        429,
-      )
-    }
+    const { limit, period, used } = await checkLimit(
+      IMAGES_PER_SCENE,
+      ` (ogni vignetta ne crea ${IMAGES_PER_SCENE}, bambina e bambino)`,
+    )
     if (body.adult && !(await hasRef(AI_ADULTS[body.adult].ref))) {
       throw new UserError(`Manca il foglio di riferimento per “${AI_ADULTS[body.adult].label}”.`)
     }

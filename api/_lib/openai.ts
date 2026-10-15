@@ -91,17 +91,22 @@ function oneLine(text: string, max: number): string {
 }
 
 /** Modello immagini, endpoint di modifica: prompt + fogli di riferimento (bambino ed eventuale adulto). */
-export async function editImage(prompt: string, references: { name: string; bytes: Uint8Array }[]): Promise<Uint8Array> {
+export async function editImage(
+  prompt: string,
+  references: { name: string; bytes: Uint8Array; type?: string }[],
+  options: { format?: 'webp' | 'png' } = {},
+): Promise<Uint8Array> {
+  const format = options.format ?? AI_IMAGE.format
   const form = new FormData()
   form.append('model', AI_MODELS.image)
   form.append('prompt', prompt)
   form.append('size', AI_IMAGE.size)
   form.append('quality', AI_IMAGE.quality)
-  form.append('output_format', AI_IMAGE.format)
-  form.append('output_compression', String(AI_IMAGE.compression))
+  form.append('output_format', format)
+  if (format !== 'png') form.append('output_compression', String(AI_IMAGE.compression))
   form.append('n', '1')
   for (const ref of references) {
-    form.append('image[]', new Blob([new Uint8Array(ref.bytes)], { type: 'image/png' }), ref.name)
+    form.append('image[]', new Blob([new Uint8Array(ref.bytes)], { type: ref.type ?? 'image/png' }), ref.name)
   }
   const response = await fetch(`${API}/images/edits`, {
     method: 'POST',
