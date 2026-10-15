@@ -145,6 +145,42 @@
       "objects": ["zaino"],
       "tags": ["mattina", "scuola", "uscire", "organizzazione", "routine"],
       "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "B01", "block": "B",
+      "title_f": "Apro l'acqua e bagno le mani", "title_m": "Apro l'acqua e bagno le mani",
+      "setting": "bagno", "outfit": "casa",
+      "actions": ["lavarsi le mani", "aprire l'acqua", "bagnare"],
+      "objects": ["lavandino", "rubinetto", "acqua", "sgabello"],
+      "tags": ["igiene", "mani", "lavarsi", "pulizia", "bagno"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "B02", "block": "B",
+      "title_f": "Metto il sapone", "title_m": "Metto il sapone",
+      "setting": "bagno", "outfit": "casa",
+      "actions": ["lavarsi le mani", "prendere il sapone"],
+      "objects": ["sapone", "dispenser", "lavandino"],
+      "tags": ["igiene", "mani", "lavarsi", "sapone", "pulizia", "bagno"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "B03", "block": "B",
+      "title_f": "Strofino bene le mani", "title_m": "Strofino bene le mani",
+      "setting": "bagno", "outfit": "casa",
+      "actions": ["lavarsi le mani", "strofinare"],
+      "objects": ["sapone", "schiuma", "lavandino"],
+      "tags": ["igiene", "mani", "lavarsi", "schiuma", "pulizia", "bagno"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "B04", "block": "B",
+      "title_f": "Sciacquo e asciugo", "title_m": "Sciacquo e asciugo",
+      "setting": "bagno", "outfit": "casa",
+      "actions": ["lavarsi le mani", "sciacquare", "asciugare"],
+      "objects": ["asciugamano", "lavandino"],
+      "tags": ["igiene", "mani", "asciugare", "pulizia", "bagno"],
+      "characters": ["bambina", "bambino"], "adults": []
     }
   ]
 }
