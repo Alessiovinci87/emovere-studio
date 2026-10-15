@@ -1,57 +1,178 @@
-import type { Cell, Sheet, TemplateId } from '../types'
+import type { Cell, ReminderKind, Sheet, SheetStatus, TemplateId } from '../types'
 
 export interface Template {
   id: TemplateId
   label: string
+  /** Gruppo mostrato nella scelta del modello */
+  group: string
   cols: number
   rows: number
+  /** Numeri dei passaggi e orari (solo routine) */
   numbered: boolean
+  /** Etichette fisse dei riquadri, es. Prima / Poi */
+  cellLabels?: string[]
+  /** Freccia tra un riquadro e il successivo (Prima → Poi) */
+  arrows?: boolean
+  /** Corpo della frase sotto la vignetta, in mm */
+  textMm: number
+  defaultTitle: string
 }
 
 export const templates: Record<TemplateId, Template> = {
-  'routine-12': { id: 'routine-12', label: 'Routine · 12 riquadri', cols: 3, rows: 4, numbered: true },
+  'routine-12': {
+    id: 'routine-12',
+    label: 'Routine · 12 riquadri',
+    group: 'Routine',
+    cols: 3,
+    rows: 4,
+    numbered: true,
+    textMm: 4.4,
+    defaultTitle: 'La mia routine',
+  },
+  'prima-poi': {
+    id: 'prima-poi',
+    label: 'Prima / Poi',
+    group: 'Prima / Poi',
+    cols: 1,
+    rows: 2,
+    numbered: false,
+    cellLabels: ['Prima', 'Poi'],
+    arrows: true,
+    textMm: 8,
+    defaultTitle: 'Prima e poi',
+  },
+  'scelte-2': {
+    id: 'scelte-2',
+    label: 'Scelte · 2',
+    group: 'Scelte',
+    cols: 1,
+    rows: 2,
+    numbered: false,
+    textMm: 7.5,
+    defaultTitle: 'Le mie scelte',
+  },
+  'scelte-3': {
+    id: 'scelte-3',
+    label: 'Scelte · 3',
+    group: 'Scelte',
+    cols: 1,
+    rows: 3,
+    numbered: false,
+    textMm: 6.5,
+    defaultTitle: 'Le mie scelte',
+  },
+  'scelte-4': {
+    id: 'scelte-4',
+    label: 'Scelte · 4',
+    group: 'Scelte',
+    cols: 2,
+    rows: 2,
+    numbered: false,
+    textMm: 6,
+    defaultTitle: 'Le mie scelte',
+  },
 }
+
+export const templateList = Object.values(templates)
 
 /** Colori dei numeri dei passaggi: si ripetono in ordine. */
 export const stepColors = ['#e8846b', '#f0b54a', '#7cb87e', '#5fa8d3', '#a58bd6', '#e98bb0']
+
+export const statuses: { id: SheetStatus; label: string; color: string; soft: string }[] = [
+  { id: 'da-fare', label: 'Da fare', color: '#a39aab', soft: '#efebf2' },
+  { id: 'in-lavorazione', label: 'In lavorazione', color: '#d9a23a', soft: '#fdf1d6' },
+  { id: 'pronta', label: 'Pronta', color: '#6aa86c', soft: '#e3f2e3' },
+  { id: 'consegnata', label: 'Stampata/Consegnata', color: '#5f93cc', soft: '#e3eefa' },
+]
+
+export function statusInfo(id: SheetStatus) {
+  return statuses.find((s) => s.id === id)!
+}
+
+/** Stato successivo, per il cambio con un clic (dopo l'ultimo si ricomincia). */
+export function nextStatus(id: SheetStatus): SheetStatus {
+  const i = statuses.findIndex((s) => s.id === id)
+  return statuses[(i + 1) % statuses.length].id
+}
+
+export const reminderKinds: { id: ReminderKind; label: string }[] = [
+  { id: 'creare', label: 'Creare' },
+  { id: 'stampare', label: 'Stampare' },
+  { id: 'consegnare', label: 'Consegnare' },
+  { id: 'rivedere', label: 'Rivedere' },
+]
+
+export function reminderLabel(kind: ReminderKind): string {
+  return reminderKinds.find((k) => k.id === kind)!.label
+}
 
 export function newId(): string {
   return crypto.randomUUID()
 }
 
 export function emptyCell(): Cell {
-  return { id: newId(), code: null, text: null, time: '' }
+  return { id: newId(), code: null, text: null, time: '', symbol: null }
 }
 
-export function createSheet(template: TemplateId = 'routine-12'): Sheet {
+export function createSheet(template: TemplateId = 'routine-12', childName = ''): Sheet {
   const t = templates[template]
+  const now = Date.now()
   return {
     id: newId(),
     template,
-    title: 'La mia routine',
+    title: titleWithName(t.defaultTitle, childName),
     subtitle: '',
     character: 'bambina',
+    childName,
     cells: Array.from({ length: t.cols * t.rows }, emptyCell),
     remember: { enabled: false, lines: ['', '', ''] },
-    updatedAt: Date.now(),
+    folderId: null,
+    status: 'da-fare',
+    notes: '',
+    reminder: null,
+    createdAt: now,
+    updatedAt: now,
   }
 }
 
-const DRAFT_KEY = 'emovere.draft.v1'
+/** Completa una scheda salvata con una versione precedente (campi mancanti → valori iniziali). */
+export function normalizeSheet(raw: Partial<Sheet>): Sheet {
+  const base = createSheet(raw.template && raw.template in templates ? raw.template : 'routine-12')
+  const sheet = { ...base, ...raw } as Sheet
+  sheet.cells = (raw.cells ?? base.cells).map((c) => ({ ...emptyCell(), ...c }))
+  return sheet
+}
 
-export function loadDraft(): Sheet | null {
-  try {
-    const raw = localStorage.getItem(DRAFT_KEY)
-    return raw ? (JSON.parse(raw) as Sheet) : null
-  } catch {
-    return null
+/** Cambia modello: tiene i riquadri esistenti nell'ordine, aggiunge o toglie quelli in fondo. */
+export function changeTemplate(sheet: Sheet, template: TemplateId): Partial<Sheet> {
+  const t = templates[template]
+  const count = t.cols * t.rows
+  const cells = sheet.cells.slice(0, count)
+  while (cells.length < count) cells.push(emptyCell())
+  const oldDefault = titleWithName(templates[sheet.template].defaultTitle, sheet.childName)
+  return {
+    template,
+    cells,
+    title: sheet.title === oldDefault ? titleWithName(t.defaultTitle, sheet.childName) : sheet.title,
   }
 }
 
-export function saveDraft(sheet: Sheet): void {
-  try {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(sheet))
-  } catch {
-    // localStorage pieno o non disponibile: la bozza resta solo in memoria
+const POSSESSIVE = /^(la|il|lo|le|i|gli) (mia|mio|mie|miei) (.+)$/i
+
+/** "La mia mattina" + Sofia → "La mattina di Sofia"; altri titoli → "… di Sofia". */
+export function titleWithName(title: string, name: string): string {
+  if (!name) return title
+  const m = title.match(POSSESSIVE)
+  return m ? `${m[1]} ${m[3]} di ${name}` : `${title} di ${name}`
+}
+
+/** Aggiorna il titolo quando cambia il nome del bambino. */
+export function retitleForName(title: string, oldName: string, newName: string): string {
+  const suffix = ` di ${oldName}`
+  if (oldName && title.endsWith(suffix)) {
+    const base = title.slice(0, -suffix.length)
+    return newName ? `${base} di ${newName}` : base
   }
+  if (!oldName) return titleWithName(title, newName)
+  return title
 }

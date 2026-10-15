@@ -10,7 +10,7 @@ import {
   type Modifier,
 } from '@dnd-kit/core'
 import { SortableContext, arrayMove, rectSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
-import { useMemo, type ReactNode } from 'react'
+import { Children, Fragment, useMemo, type ReactNode } from 'react'
 import type { ImageVariant } from '../lib/catalog'
 import { templates } from '../lib/sheet'
 import type { Cell, Sheet } from '../types'
@@ -22,10 +22,11 @@ interface EditProps {
   scale: number
   onChange: (patch: Partial<Sheet>) => void
   onChooseScene: (index: number) => void
+  onChooseSymbol: (index: number) => void
 }
 
 /** Pagina A4 modificabile, per il composer. */
-export function SheetView({ sheet, scale, onChange, onChooseScene }: EditProps) {
+export function SheetView({ sheet, scale, onChange, onChooseScene, onChooseSymbol }: EditProps) {
   const template = templates[sheet.template]
 
   const sensors = useSensors(
@@ -88,9 +89,10 @@ export function SheetView({ sheet, scale, onChange, onChooseScene }: EditProps) 
                   cell={cell}
                   index={i}
                   character={sheet.character}
-                  numbered={template.numbered}
+                  template={template}
                   onChoose={() => onChooseScene(i)}
-                  onClear={() => updateCell(i, { code: null, text: null })}
+                  onSymbol={() => onChooseSymbol(i)}
+                  onClear={() => updateCell(i, { code: null, text: null, symbol: null })}
                   onChange={(patch) => updateCell(i, patch)}
                 />
               )),
@@ -131,7 +133,7 @@ export function PrintSheetView({ sheet, imageVariant }: { sheet: Sheet; imageVar
               cell={cell}
               index={i}
               character={sheet.character}
-              numbered={template.numbered}
+              template={template}
               imageVariant={imageVariant}
             />
           )),
@@ -157,17 +159,28 @@ interface PageProps {
 /** Impaginazione A4 (210 × 297 mm, margini 10 mm), comune a schermo e PDF. */
 function SheetPage({ sheet, header, grid, rememberLine }: PageProps) {
   const template = templates[sheet.template]
-  const layoutCells = (children: ReactNode) => (
-    <div
-      className="grid min-h-0 flex-1 gap-[4mm]"
-      style={{
-        gridTemplateColumns: `repeat(${template.cols}, minmax(0, 1fr))`,
-        gridTemplateRows: `repeat(${template.rows}, minmax(0, 1fr))`,
-      }}
-    >
-      {children}
-    </div>
-  )
+  const layoutCells = (children: ReactNode) =>
+    template.arrows ? (
+      // Prima / Poi: riquadri uno sotto l'altro con una freccia in mezzo
+      <div className="flex min-h-0 flex-1 flex-col gap-[2mm]">
+        {Children.toArray(children).map((child, i) => (
+          <Fragment key={i}>
+            {i > 0 && <Arrow />}
+            <div className="flex min-h-0 flex-1 flex-col *:flex-1">{child}</div>
+          </Fragment>
+        ))}
+      </div>
+    ) : (
+      <div
+        className="grid min-h-0 flex-1 gap-[4mm]"
+        style={{
+          gridTemplateColumns: `repeat(${template.cols}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${template.rows}, minmax(0, 1fr))`,
+        }}
+      >
+        {children}
+      </div>
+    )
 
   return (
     <div className="flex h-[297mm] w-[210mm] flex-col gap-[4mm] bg-white p-[10mm] font-sans text-ink">
@@ -189,5 +202,13 @@ function SheetPage({ sheet, header, grid, rememberLine }: PageProps) {
         </section>
       )}
     </div>
+  )
+}
+
+function Arrow() {
+  return (
+    <svg viewBox="0 0 60 40" className="mx-auto h-[12mm] shrink-0" aria-hidden="true">
+      <path d="M30 4 V30 M14 20 L30 34 L46 20" fill="none" stroke="#c9bfae" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }

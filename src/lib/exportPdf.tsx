@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client'
 import { PrintSheetView } from '../components/SheetView'
 import type { Sheet } from '../types'
 import type { ImageVariant } from './catalog'
+import { downloadBlob } from './download'
 
 export type ExportKind = 'stampa' | 'whatsapp'
 
@@ -33,7 +34,7 @@ export async function exportPdf(sheet: Sheet, kind: ExportKind): Promise<void> {
     pdf = buildPdf(sheet, canvas, quality)
     if (!preset.maxBytes || pdf.size <= preset.maxBytes) break
   }
-  download(pdf!, fileName(sheet, kind))
+  downloadBlob(pdf!, fileName(sheet, kind))
 }
 
 /** Disegna la scheda fuori schermo e la converte in un canvas alla risoluzione richiesta. */
@@ -88,13 +89,4 @@ export function fileName(sheet: Sheet, kind: ExportKind): string {
       .replace(/[^a-zA-Z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '') || 'Scheda'
   return `${title}_${sheet.character}${kind === 'whatsapp' ? '_whatsapp' : ''}.pdf`
-}
-
-function download(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }

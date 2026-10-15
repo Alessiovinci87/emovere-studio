@@ -8,7 +8,7 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
 ## Stack
 - React + Vite + TypeScript, Tailwind CSS
 - Nessun backend: immagini in `public/library/` (vedi sotto), catalogo in `src/data/catalog.json`
-- Salvataggio schede in localStorage (solo per il prototipo)
+- Cartelle, schede e bozza in localStorage (solo per il prototipo), con backup JSON esportabile
 - Export PDF lato client: la scheda è un DOM in formato A4, esportato con `html-to-image` + `jsPDF`
 - Deploy di prova su Vercel, protetto da password (vedi "Deploy")
 
@@ -22,21 +22,37 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
 - I percorsi si costruiscono solo con `sceneImage` / `sceneThumb` in `src/lib/catalog.ts`
 - Codice = blocco (A mattino, B igiene, C pasti, D scuola, E emozioni, F sera, G uscite, H regole) + numero scena
 - Ogni scena esiste in due versioni (bambina, bambino) con stessa composizione
+- Le vignette sono quadrate: il riquadro le dispone come quadrato (unità `cqw`/`cqh`), così angoli arrotondati e simboli seguono l'immagine
 - `catalog.json`: una voce per scena con `code`, `block`, `title_f`, `title_m`, `setting`, `outfit`, `actions`, `objects`, `tags`, `characters`, `adults`
 - I titoli sono in prima persona e al femminile/maschile in base al personaggio (`title_f` / `title_m`)
+
+## Privacy (regola fissa)
+- Nei campi con nomi (cartella, nome del bambino) e negli appunti compare sempre l'avviso: "Usa solo nome o iniziali. Non inserire diagnosi o dati clinici." (`PRIVACY_TEXT` / `PrivacyNote` in `src/components/ui.tsx`)
+- Ogni nuovo campo di testo libero riferito a un bambino deve mostrare lo stesso avviso
+- Nessun dato lascia il browser, tranne i file che l'utente scarica (PDF, .ics, backup). I nomi dei file .ics e di backup non contengono nomi di bambini
 
 ## Funzioni del prototipo
 1. **Libreria**: griglia di vignette, ricerca testuale su titolo e tag (case-insensitive, senza accenti), filtri per blocco, ambiente e personaggio.
 2. **Composer scheda**:
-   - Template: Routine (6, 9, 12 riquadri), Storia sociale (4, 6), Prima/Poi (2), Scelte (2, 3, 4)
+   - Template disponibili: Routine 12, Prima/Poi (2 riquadri grandi uno sotto l'altro con freccia ↓), Scelte 2 e 3 (in colonna) e 4 (2×2). Previsti: Routine 6 e 9, Storia sociale (4, 6). Definiti in `templates` (`src/lib/sheet.ts`)
+   - Il modello si sceglie alla creazione e si può cambiare nel composer (conferma se si perdono vignette)
    - Titolo e sottotitolo modificabili
    - Click su un riquadro vuoto → si apre la libreria → la vignetta scelta entra nel riquadro
    - Sotto ogni vignetta: frase modificabile (default = titolo della scena per il personaggio scelto)
    - Numero grande nel riquadro (routine), orario opzionale per riquadro
    - Riordino riquadri con drag and drop
    - Riquadro finale opzionale "Ricordo sempre" con 3 frasi modificabili
+   - Simboli SVG sopra la vignetta (V verde, X rossa, divieto), in uno dei 4 angoli, visibili anche nel PDF (`SymbolIcon`)
+   - Nome del bambino (facoltativo) inserito nel titolo: "La mia mattina" + Sofia → "La mattina di Sofia", altri titoli → "… di Sofia". Se la scheda è in una cartella, il nome della cartella viene proposto in automatico (nuova scheda, salvataggio, duplica/sposta se il nome era quello della cartella di partenza)
 3. **Cambio personaggio**: un interruttore bambina/bambino sostituisce tutte le vignette della scheda con la versione dell'altro personaggio (stesso codice) e aggiorna le frasi di default.
-4. **Schede salvate**: salva, apri, duplica, elimina.
+4. **Cartelle e schede**:
+   - Una cartella per bambino (solo nome o iniziali): crea, rinomina, elimina (elimina anche le sue schede), appunti
+   - Schermata principale: elenco cartelle con contatori per stato; dentro la cartella, schede raggruppate per stato
+   - Schede: salva (una scheda nuova è una bozza finché non la si salva in una cartella; dopo, le modifiche si salvano da sole), apri, duplica (anche in un'altra cartella), sposta, elimina, appunti
+   - Stato: Da fare, In lavorazione, Pronta, Stampata/Consegnata. Nella cartella un clic sull'etichetta passa allo stato successivo; nel composer si sceglie direttamente
+   - Promemoria: una data e un tipo (Creare, Stampare, Consegnare, Rivedere) per scheda. All'apertura, se ci sono promemoria di oggi o scaduti non fatti, si apre il pannello "Da fare"; il menu mostra un badge con il numero. "Aggiungi al calendario" scarica un .ics (evento di un giorno, avviso alle 9)
+   - Backup: "Esporta tutto" (JSON con cartelle e schede, non la bozza) e "Importa backup" (sostituisce tutto, dopo conferma)
+   - Dati in `src/lib/store.ts` (operazioni pure `StoreData → StoreData`); le schede salvate con versioni precedenti vengono completate da `normalizeSheet`
 5. **Export**: "PDF stampa" (A4, 300 dpi, margini 10 mm, pronto da plastificare) e "PDF WhatsApp" (immagini compresse, file leggero).
 
 ## Export PDF
@@ -60,7 +76,7 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
 - Interfaccia in italiano
 
 ## Fuori da questa fase
-Login e multiutente, backend e database, generazione AI delle immagini, abbonamenti, guide per i genitori, simboli SVG (V, X, frecce): arriveranno dopo la validazione con Martina.
+Login e multiutente, backend e database, sincronizzazione tra dispositivi, generazione AI delle immagini, abbonamenti, guide per i genitori: arriveranno dopo la validazione con Martina.
 
 ## Convenzioni
 - Componenti piccoli e tipizzati, niente librerie superflue

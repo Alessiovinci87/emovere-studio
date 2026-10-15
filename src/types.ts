@@ -20,7 +20,15 @@ export interface Catalog {
   scenes: Scene[]
 }
 
-export type TemplateId = 'routine-12'
+export type TemplateId = 'routine-12' | 'prima-poi' | 'scelte-2' | 'scelte-3' | 'scelte-4'
+
+export type SymbolKind = 'check' | 'cross' | 'forbidden'
+export type Corner = 'tl' | 'tr' | 'bl' | 'br'
+
+export interface CellSymbol {
+  kind: SymbolKind
+  corner: Corner
+}
 
 export interface Cell {
   id: string
@@ -29,6 +37,18 @@ export interface Cell {
   /** Frase personalizzata; null = titolo della scena per il personaggio scelto */
   text: string | null
   time: string
+  symbol: CellSymbol | null
+}
+
+export type SheetStatus = 'da-fare' | 'in-lavorazione' | 'pronta' | 'consegnata'
+
+export type ReminderKind = 'creare' | 'stampare' | 'consegnare' | 'rivedere'
+
+export interface Reminder {
+  /** Data locale in formato AAAA-MM-GG */
+  date: string
+  kind: ReminderKind
+  done: boolean
 }
 
 export interface Sheet {
@@ -37,7 +57,30 @@ export interface Sheet {
   title: string
   subtitle: string
   character: Character
+  /** Nome o iniziali del bambino (facoltativo), inserito nel titolo */
+  childName: string
   cells: Cell[]
   remember: { enabled: boolean; lines: [string, string, string] }
+  /** null = scheda non ancora salvata (bozza) */
+  folderId: string | null
+  status: SheetStatus
+  notes: string
+  reminder: Reminder | null
+  createdAt: number
   updatedAt: number
+}
+
+/** Cartella di un bambino */
+export interface Folder {
+  id: string
+  /** Solo nome o iniziali */
+  name: string
+  notes: string
+  createdAt: number
+  updatedAt: number
+}
+
+export interface StoreData {
+  folders: Folder[]
+  sheets: Sheet[]
 }

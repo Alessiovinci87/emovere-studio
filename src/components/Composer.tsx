@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ExportKind } from '../lib/exportPdf'
-import { templates } from '../lib/sheet'
-import type { Sheet } from '../types'
+import { changeTemplate, retitleForName, templateList, templates } from '../lib/sheet'
+import type { Folder, Sheet, TemplateId } from '../types'
 import { CharacterToggle } from './CharacterToggle'
+import { ReminderEditor } from './ReminderEditor'
 import { SheetView } from './SheetView'
+import { StatusPicker } from './Status'
+import { Button, Field, NameInput, NotesField, inputClass } from './ui'
 
 /** Larghezza di un A4 in pixel CSS (210 mm a 96 dpi) */
 const A4_WIDTH_PX = (210 / 25.4) * 96
@@ -11,12 +14,16 @@ const A4_HEIGHT_PX = (297 / 25.4) * 96
 
 interface Props {
   sheet: Sheet
+  folder: Folder | undefined
   onChange: (patch: Partial<Sheet>) => void
   onChooseScene: (index: number) => void
-  onReset: () => void
+  onChooseSymbol: (index: number) => void
+  onSave: () => void
+  onOpenFolder: (id: string) => void
+  onNew: () => void
 }
 
-export function Composer({ sheet, onChange, onChooseScene, onReset }: Props) {
+export function Composer({ sheet, folder, onChange, onChooseScene, onChooseSymbol, onSave, onOpenFolder, onNew }: Props) {
   const scale = useFitScale()
   const filled = sheet.cells.filter((c) => c.code).length
   const [exporting, setExporting] = useState<ExportKind | null>(null)
@@ -34,11 +41,49 @@ export function Composer({ sheet, onChange, onChooseScene, onReset }: Props) {
     }
   }
 
+  function handleTemplate(id: TemplateId) {
+    const count = templates[id].cols * templates[id].rows
+    const lost = sheet.cells.slice(count).filter((c) => c.code).length
+    if (lost > 0 && !confirm(`Il nuovo modello ha ${count} riquadri: ${lost} vignette in fondo verranno tolte. Continuare?`))
+      return
+    onChange(changeTemplate(sheet, id))
+  }
+
+  function handleChildName(name: string) {
+    onChange({ childName: name, title: retitleForName(sheet.title, sheet.childName.trim(), name.trim()) })
+  }
+
   return (
-    <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-      <aside className="flex shrink-0 flex-col gap-5 rounded-3xl bg-white p-5 shadow-sm lg:sticky lg:top-6 lg:w-64">
+    <div className="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)] lg:items-start xl:grid-cols-[16rem_minmax(0,1fr)_17rem]">
+      <aside className="flex flex-col gap-5 rounded-3xl bg-white p-5 shadow-sm lg:col-start-1 lg:row-start-1">
+        {folder ? (
+          <div className="flex flex-col gap-1">
+            <button onClick={() => onOpenFolder(folder.id)} className="self-start font-bold hover:text-sky">
+              📁 {folder.name}
+            </button>
+            <p className="text-xs text-muted">Le modifiche si salvano da sole.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2 rounded-2xl bg-butter p-3">
+            <p className="text-sm font-bold">Scheda non ancora salvata</p>
+            <Button tone="primary" onClick={onSave}>
+              Salva in una cartella
+            </Button>
+          </div>
+        )}
+
         <Field label="Modello">
-          <p className="font-bold">{templates[sheet.template].label}</p>
+          <select
+            value={sheet.template}
+            onChange={(e) => handleTemplate(e.target.value as TemplateId)}
+            className={`${inputClass} font-bold`}
+          >
+            {templateList.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
           <p className="text-sm text-muted">
             {filled} di {sheet.cells.length} riquadri pieni
           </p>
@@ -47,6 +92,18 @@ export function Composer({ sheet, onChange, onChooseScene, onReset }: Props) {
         <Field label="Personaggio">
           <CharacterToggle value={sheet.character} onChange={(character) => onChange({ character })} />
         </Field>
+
+        <div className="flex flex-col gap-2">
+          <NameInput label="Nome del bambino (facoltativo)" value={sheet.childName} onChange={handleChildName} />
+          {folder && !sheet.childName.trim() && (
+            <button
+              onClick={() => handleChildName(folder.name)}
+              className="self-start rounded-full bg-sky-soft px-3 py-1 text-xs font-bold hover:bg-sky/25"
+            >
+              Usa “{folder.name}”
+            </button>
+          )}
+        </div>
 
         <label className="flex cursor-pointer items-center justify-between gap-3">
           <span className="font-bold">Riquadro “Ricordo sempre”</span>
@@ -59,8 +116,8 @@ export function Composer({ sheet, onChange, onChooseScene, onReset }: Props) {
         </label>
 
         <p className="text-sm leading-relaxed text-muted">
-          Clicca su un riquadro per scegliere la vignetta. Trascina i riquadri per cambiare l'ordine. Titolo,
-          frasi e orari si modificano direttamente sul foglio.
+          Clicca su un riquadro per scegliere la vignetta; passandoci sopra puoi cambiarla o aggiungere un simbolo.
+          Trascina i riquadri per cambiare l'ordine. Titolo, frasi e orari si modificano sul foglio.
         </p>
 
         <Field label="Scarica">
@@ -82,26 +139,35 @@ export function Composer({ sheet, onChange, onChooseScene, onReset }: Props) {
           </div>
         </Field>
 
-        <button
-          onClick={() => {
-            if (confirm('Vuoi iniziare una scheda nuova? Quella attuale verrà cancellata.')) onReset()
-          }}
-          className="rounded-full border border-line px-4 py-2 text-sm font-bold text-muted hover:bg-sand hover:text-ink"
-        >
-          Nuova scheda
-        </button>
+        <Button onClick={onNew}>Nuova scheda</Button>
       </aside>
 
-      <div ref={scale.ref} className="min-w-0 flex-1">
+      <div ref={scale.ref} className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
         <div
           className="mx-auto overflow-hidden rounded-xl shadow-lg"
           style={{ width: A4_WIDTH_PX * scale.value, height: A4_HEIGHT_PX * scale.value }}
         >
           <div style={{ transform: `scale(${scale.value})`, transformOrigin: 'top left' }}>
-            <SheetView sheet={sheet} scale={scale.value} onChange={onChange} onChooseScene={onChooseScene} />
+            <SheetView
+              sheet={sheet}
+              scale={scale.value}
+              onChange={onChange}
+              onChooseScene={onChooseScene}
+              onChooseSymbol={onChooseSymbol}
+            />
           </div>
         </div>
       </div>
+
+      <aside className="flex flex-col gap-5 rounded-3xl bg-white p-5 shadow-sm lg:col-start-1 lg:row-start-2 xl:col-start-3 xl:row-start-1">
+        <Field label="Stato">
+          <StatusPicker status={sheet.status} onChange={(status) => onChange({ status })} />
+        </Field>
+        <Field label="Promemoria">
+          <ReminderEditor sheet={sheet} folder={folder} onChange={(reminder) => onChange({ reminder })} />
+        </Field>
+        <NotesField value={sheet.notes} onChange={(notes) => onChange({ notes })} />
+      </aside>
     </div>
   )
 }
@@ -128,15 +194,6 @@ function ExportButton({
       <span className="font-bold">{busy ? 'Preparo il PDF…' : label}</span>
       <span className="text-xs text-muted">{hint}</span>
     </button>
-  )
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-2">
-      <span className="text-xs font-bold uppercase tracking-wide text-muted">{label}</span>
-      {children}
-    </div>
   )
 }
 

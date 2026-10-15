@@ -2,18 +2,20 @@ import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import type { CSSProperties, HTMLAttributes, Ref } from 'react'
 import { getScene, sceneImage, sceneTitle, type ImageVariant } from '../lib/catalog'
-import { stepColors } from '../lib/sheet'
+import { stepColors, type Template } from '../lib/sheet'
 import type { Cell, Character } from '../types'
+import { SymbolIcon, cornerClass } from './SymbolIcon'
 
 interface Props {
   cell: Cell
   index: number
   character: Character
-  numbered: boolean
+  template: Template
 }
 
 interface EditProps extends Props {
   onChoose: () => void
+  onSymbol: () => void
   onClear: () => void
   onChange: (patch: Partial<Cell>) => void
 }
@@ -26,7 +28,7 @@ const stopDrag = {
 }
 
 /** Riquadro modificabile e trascinabile, per il composer. */
-export function SortableSheetCell({ onChoose, onClear, onChange, ...props }: EditProps) {
+export function SortableSheetCell({ onChoose, onSymbol, onClear, onChange, ...props }: EditProps) {
   const { cell, index, character } = props
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: cell.id,
@@ -54,8 +56,9 @@ export function SortableSheetCell({ onChoose, onClear, onChange, ...props }: Edi
         />
       }
       overlay={
-        <div className="absolute inset-x-0 bottom-[1mm] flex justify-center gap-[1.5mm] opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+        <div className="absolute inset-x-0 bottom-[1mm] z-[2] flex justify-center gap-[1.5mm] opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
           <CellButton onClick={onChoose}>Cambia</CellButton>
+          <CellButton onClick={onSymbol}>Simbolo</CellButton>
           <CellButton onClick={onClear}>Svuota</CellButton>
         </div>
       }
@@ -76,6 +79,7 @@ export function SortableSheetCell({ onChoose, onClear, onChange, ...props }: Edi
           placeholder={scene ? '' : 'Frase'}
           aria-label={`Frase riquadro ${index + 1}`}
           className={textClass}
+          style={{ fontSize: `${props.template.textMm}mm` }}
           {...stopDrag}
         />
       }
@@ -94,15 +98,18 @@ export function PrintSheetCell({ imageVariant, ...props }: Props & { imageVarian
       {...props}
       imageVariant={imageVariant}
       time={cell.time ? <span className={timeClass}>{cell.time}</span> : null}
-      text={<p className={`${textClass} line-clamp-2 h-[calc(2lh+3px)]`}>{text}</p>}
+      text={
+        <p className={`${textClass} line-clamp-2 h-[calc(2lh+3px)]`} style={{ fontSize: `${props.template.textMm}mm` }}>
+          {text}
+        </p>
+      }
     />
   )
 }
 
 const timeClass =
   'sheet-field w-[13mm] rounded-full border-solid border-line px-[1mm] py-[0.3mm] text-center text-[3.4mm] font-bold leading-tight'
-const textClass =
-  'sheet-field mt-[1mm] shrink-0 whitespace-pre-wrap px-[1mm] text-center text-[4.4mm] font-bold leading-[1.15]'
+const textClass = 'sheet-field mt-[1mm] shrink-0 whitespace-pre-wrap px-[1mm] text-center font-bold leading-[1.15]'
 
 interface FrameProps extends Props {
   imageVariant: ImageVariant
@@ -121,7 +128,7 @@ function CellFrame({
   cell,
   index,
   character,
-  numbered,
+  template,
   imageVariant,
   time,
   text,
@@ -134,6 +141,7 @@ function CellFrame({
 }: FrameProps) {
   const scene = cell.code ? getScene(cell.code) : undefined
   const color = stepColors[index % stepColors.length]
+  const label = template.cellLabels?.[index]
 
   return (
     <div
@@ -142,30 +150,45 @@ function CellFrame({
       className={`group relative flex min-h-0 flex-col rounded-[4mm] border-[0.6mm] bg-white p-[2mm] ${className}`}
       {...frameProps}
     >
+      {label && (
+        <span
+          className="mb-[1.5mm] self-start rounded-full px-[5mm] py-[1mm] text-[7mm] font-bold leading-tight text-white"
+          style={{ backgroundColor: color }}
+        >
+          {label}
+        </span>
+      )}
+
       <div className="flex min-h-0 flex-1 gap-[1.5mm]">
-        {/* Colonna a sinistra: numero del passaggio e, sotto, l'orario */}
-        <div className="flex w-[13mm] shrink-0 flex-col items-center gap-[1.5mm]">
-          {numbered && (
+        {template.numbered && (
+          /* Colonna a sinistra: numero del passaggio e, sotto, l'orario */
+          <div className="flex w-[13mm] shrink-0 flex-col items-center gap-[1.5mm]">
             <span
               className="flex h-[11mm] w-[11mm] items-center justify-center rounded-full text-[6.5mm] font-bold leading-none text-white shadow-sm"
               style={{ backgroundColor: color }}
             >
               {index + 1}
             </span>
-          )}
-          {time}
-        </div>
+            {time}
+          </div>
+        )}
 
-        <div className="relative min-h-0 flex-1">
+        {/* container-type: size → le unità cqw/cqh misurano lo spazio disponibile per la vignetta */}
+        <div className="relative min-h-0 flex-1 [container-type:size]">
           {scene ? (
             <>
-              {/* Posizionata in assoluto con max-w/max-h: il box coincide con l'immagine, così gli angoli arrotondati si vedono */}
-              <img
-                src={sceneImage(scene.code, character, imageVariant)}
-                alt={sceneTitle(scene, character)}
-                draggable={false}
-                className="absolute inset-0 m-auto max-h-full max-w-full rounded-[3mm]"
-              />
+              {/* Le vignette sono quadrate: il box coincide con l'immagine, così angoli e simboli la seguono */}
+              <div className="absolute inset-0 m-auto size-[min(100cqw,100cqh)]">
+                <img
+                  src={sceneImage(scene.code, character, imageVariant)}
+                  alt={sceneTitle(scene, character)}
+                  draggable={false}
+                  className="h-full w-full rounded-[7%] object-cover"
+                />
+                {cell.symbol && (
+                  <SymbolIcon kind={cell.symbol.kind} className={`absolute w-[30%] ${cornerClass[cell.symbol.corner]}`} />
+                )}
+              </div>
               {overlay}
             </>
           ) : (

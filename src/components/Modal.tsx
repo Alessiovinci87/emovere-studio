@@ -3,10 +3,11 @@ import { useEffect, type ReactNode } from 'react'
 interface Props {
   title: string
   onClose: () => void
+  size?: 'sm' | 'lg'
   children: ReactNode
 }
 
-export function Modal({ title, onClose, children }: Props) {
+export function Modal({ title, onClose, size = 'lg', children }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
@@ -22,7 +23,9 @@ export function Modal({ title, onClose, children }: Props) {
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="flex max-h-full w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-cream shadow-xl"
+        className={`flex max-h-full w-full flex-col overflow-hidden rounded-3xl bg-cream shadow-xl ${
+          size === 'sm' ? 'max-w-md' : 'max-w-5xl'
+        }`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-line px-6 py-4">
