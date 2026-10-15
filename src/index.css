@@ -1,0 +1,47 @@
+@import 'tailwindcss';
+@import '@fontsource/atkinson-hyperlegible/400.css';
+@import '@fontsource/atkinson-hyperlegible/700.css';
+
+@theme {
+  --font-sans: 'Atkinson Hyperlegible', system-ui, sans-serif;
+  --color-cream: #fbf7f0;
+  --color-sand: #f1e9dc;
+  --color-line: #e4d9c8;
+  --color-ink: #3b3846;
+  --color-muted: #8a8394;
+  --color-sky: #6f9fd8;
+  --color-sky-soft: #e3eefa;
+  --color-peach: #f4a78f;
+  --color-peach-soft: #fdebe4;
+  --color-butter: #fff6d9;
+}
+
+body {
+  background: var(--color-cream);
+  color: var(--color-ink);
+}
+
+@layer components {
+  /* Campi di testo dentro la scheda: sembrano testo stampato finché non li tocchi */
+  .sheet-field {
+    background: transparent;
+    border: 1.5px dashed transparent;
+    border-radius: 2mm;
+    outline: none;
+    width: 100%;
+    color: inherit;
+    font: inherit;
+    resize: none;
+  }
+  .sheet-field:hover {
+    border-color: var(--color-line);
+  }
+  .sheet-field:focus {
+    border-color: var(--color-sky);
+    background: white;
+  }
+  .sheet-field::placeholder {
+    color: #c4bccb;
+    font-weight: 400;
+  }
+}

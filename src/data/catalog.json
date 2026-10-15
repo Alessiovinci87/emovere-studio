@@ -1,0 +1,150 @@
+{
+  "version": 1,
+  "blocks": {
+    "A": "Routine del mattino",
+    "B": "Igiene e bagno",
+    "C": "Pasti",
+    "D": "Scuola",
+    "E": "Emozioni e calma",
+    "F": "Sera",
+    "G": "Uscite",
+    "H": "Regole e comportamenti"
+  },
+  "scenes": [
+    {
+      "code": "A01", "block": "A",
+      "title_f": "Mi sveglio", "title_m": "Mi sveglio",
+      "setting": "cameretta", "outfit": "pigiama",
+      "actions": ["svegliarsi", "stiracchiarsi", "alzarsi"],
+      "objects": ["letto", "coperta", "lampada", "comodino"],
+      "tags": ["mattina", "sveglia", "letto", "routine"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "A02", "block": "A",
+      "title_f": "Vado in cucina", "title_m": "Vado in cucina",
+      "setting": "cucina", "outfit": "pigiama",
+      "actions": ["camminare", "andare in cucina"],
+      "objects": ["tavolo", "sedia"],
+      "tags": ["mattina", "colazione", "spostarsi", "routine"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "A03", "block": "A",
+      "title_f": "Scelgo cosa mangiare", "title_m": "Scelgo cosa mangiare",
+      "setting": "cucina", "outfit": "pigiama",
+      "actions": ["scegliere", "pensare"],
+      "objects": ["latte", "cereali", "toast", "frutta", "ciotola", "piatto"],
+      "tags": ["mattina", "colazione", "scelta", "cibo", "routine"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "A04", "block": "A",
+      "title_f": "Faccio colazione seduta", "title_m": "Faccio colazione seduto",
+      "setting": "cucina", "outfit": "pigiama",
+      "actions": ["mangiare", "stare seduto"],
+      "objects": ["ciotola", "cucchiaio", "cereali", "latte", "bicchiere"],
+      "tags": ["mattina", "colazione", "pasto", "cibo", "routine"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "A05", "block": "A",
+      "title_f": "Sparecchio", "title_m": "Sparecchio",
+      "setting": "cucina", "outfit": "pigiama",
+      "actions": ["sparecchiare", "portare", "riordinare"],
+      "objects": ["ciotola", "tazza", "lavandino"],
+      "tags": ["mattina", "colazione", "autonomia", "ordine", "routine"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "A06", "block": "A",
+      "title_f": "Prendo i vestiti", "title_m": "Prendo i vestiti",
+      "setting": "cameretta", "outfit": "pigiama",
+      "actions": ["prendere", "prepararsi"],
+      "objects": ["vestiti", "cassettiera"],
+      "tags": ["mattina", "vestirsi", "autonomia", "routine"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "A07", "block": "A",
+      "title_f": "Mi lavo la faccia", "title_m": "Mi lavo la faccia",
+      "setting": "bagno", "outfit": "pigiama",
+      "actions": ["lavarsi", "lavare il viso"],
+      "objects": ["lavandino", "acqua", "sgabello", "specchio", "asciugamano"],
+      "tags": ["mattina", "igiene", "pulizia", "bagno", "routine"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "A08", "block": "A",
+      "title_f": "Mi vesto", "title_m": "Mi vesto",
+      "setting": "cameretta", "outfit": "casa",
+      "actions": ["vestirsi"],
+      "objects": ["maglietta", "letto"],
+      "tags": ["mattina", "vestirsi", "autonomia", "routine"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "A09", "block": "A",
+      "title_f": "Metto il pigiama nel cesto", "title_m": "Metto il pigiama nel cesto",
+      "setting": "bagno", "outfit": "casa",
+      "actions": ["riordinare", "mettere a lavare"],
+      "objects": ["pigiama", "cesto della biancheria"],
+      "tags": ["mattina", "ordine", "autonomia", "routine"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "A10", "block": "A",
+      "title_f": "Rifaccio il letto", "title_m": "Rifaccio il letto",
+      "setting": "cameretta", "outfit": "casa",
+      "actions": ["rifare il letto", "riordinare"],
+      "objects": ["letto", "coperta"],
+      "tags": ["mattina", "ordine", "autonomia", "routine"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "A11", "block": "A",
+      "title_f": "Mi pettino", "title_m": "Mi pettino",
+      "setting": "bagno", "outfit": "casa",
+      "actions": ["pettinarsi"],
+      "objects": ["spazzola", "specchio"],
+      "tags": ["mattina", "igiene", "capelli", "routine"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "A12", "block": "A",
+      "title_f": "Mi lavo i denti", "title_m": "Mi lavo i denti",
+      "setting": "bagno", "outfit": "casa",
+      "actions": ["lavarsi i denti"],
+      "objects": ["spazzolino", "dentifricio", "lavandino", "sgabello"],
+      "tags": ["mattina", "igiene", "denti", "bagno", "routine"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "A13", "block": "A",
+      "title_f": "Metto il grembiule", "title_m": "Metto il grembiule",
+      "setting": "cameretta", "outfit": "grembiule",
+      "actions": ["vestirsi", "abbottonare"],
+      "objects": ["grembiule"],
+      "tags": ["mattina", "scuola", "vestirsi", "routine"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "A14", "block": "A",
+      "title_f": "Metto scarpe e giubbotto", "title_m": "Metto scarpe e giubbotto",
+      "setting": "ingresso", "outfit": "uscita",
+      "actions": ["mettere le scarpe", "allacciare", "vestirsi"],
+      "objects": ["scarpe", "giubbotto", "panchina", "attaccapanni"],
+      "tags": ["mattina", "uscire", "scuola", "autonomia", "routine"],
+      "characters": ["bambina", "bambino"], "adults": []
+    },
+    {
+      "code": "A15", "block": "A",
+      "title_f": "Controllo lo zaino", "title_m": "Controllo lo zaino",
+      "setting": "ingresso", "outfit": "uscita",
+      "actions": ["controllare", "prepararsi"],
+      "objects": ["zaino"],
+      "tags": ["mattina", "scuola", "uscire", "organizzazione", "routine"],
+      "characters": ["bambina", "bambino"], "adults": []
+    }
+  ]
+}
