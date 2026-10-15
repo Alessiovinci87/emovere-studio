@@ -33,7 +33,7 @@ export async function exportPdf(sheet: Sheet, kind: ExportKind): Promise<void> {
     pdf = buildPdf(sheet, canvas, quality)
     if (!preset.maxBytes || pdf.size <= preset.maxBytes) break
   }
-  download(pdf!, fileName(sheet))
+  download(pdf!, fileName(sheet, kind))
 }
 
 /** Disegna la scheda fuori schermo e la converte in un canvas alla risoluzione richiesta. */
@@ -76,15 +76,18 @@ function buildPdf(sheet: Sheet, canvas: HTMLCanvasElement, jpegQuality: number |
   return doc.output('blob')
 }
 
-/** "La mia mattina" + bambina → "La-mia-mattina_bambina.pdf" */
-export function fileName(sheet: Sheet): string {
+/**
+ * "La mia mattina" + bambina → "La-mia-mattina_bambina.pdf"
+ * (per WhatsApp: "La-mia-mattina_bambina_whatsapp.pdf")
+ */
+export function fileName(sheet: Sheet, kind: ExportKind): string {
   const title =
     sheet.title
       .normalize('NFD')
       .replace(/[̀-ͯ]/g, '')
       .replace(/[^a-zA-Z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '') || 'Scheda'
-  return `${title}_${sheet.character}.pdf`
+  return `${title}_${sheet.character}${kind === 'whatsapp' ? '_whatsapp' : ''}.pdf`
 }
 
 function download(blob: Blob, name: string) {

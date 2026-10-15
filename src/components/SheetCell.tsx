@@ -100,7 +100,7 @@ export function PrintSheetCell({ imageVariant, ...props }: Props & { imageVarian
 }
 
 const timeClass =
-  'sheet-field absolute right-[1.5mm] top-[1.5mm] z-[1] w-[16mm] rounded-full bg-white/90 px-[1.5mm] py-[0.5mm] text-center text-[3.6mm] font-bold'
+  'sheet-field w-[13mm] rounded-full border-solid border-line px-[1mm] py-[0.3mm] text-center text-[3.4mm] font-bold leading-tight'
 const textClass =
   'sheet-field mt-[1mm] shrink-0 whitespace-pre-wrap px-[1mm] text-center text-[4.4mm] font-bold leading-[1.15]'
 
@@ -142,31 +142,36 @@ function CellFrame({
       className={`group relative flex min-h-0 flex-col rounded-[4mm] border-[0.6mm] bg-white p-[2mm] ${className}`}
       {...frameProps}
     >
-      {numbered && (
-        <span
-          className="absolute left-[1.5mm] top-[1.5mm] z-[1] flex h-[11mm] w-[11mm] items-center justify-center rounded-full text-[6.5mm] font-bold leading-none text-white shadow-sm"
-          style={{ backgroundColor: color }}
-        >
-          {index + 1}
-        </span>
-      )}
+      <div className="flex min-h-0 flex-1 gap-[1.5mm]">
+        {/* Colonna a sinistra: numero del passaggio e, sotto, l'orario */}
+        <div className="flex w-[13mm] shrink-0 flex-col items-center gap-[1.5mm]">
+          {numbered && (
+            <span
+              className="flex h-[11mm] w-[11mm] items-center justify-center rounded-full text-[6.5mm] font-bold leading-none text-white shadow-sm"
+              style={{ backgroundColor: color }}
+            >
+              {index + 1}
+            </span>
+          )}
+          {time}
+        </div>
 
-      {time}
-
-      <div className="relative flex min-h-0 flex-1 items-center justify-center">
-        {scene ? (
-          <>
-            <img
-              src={sceneImage(scene.code, character, imageVariant)}
-              alt={sceneTitle(scene, character)}
-              draggable={false}
-              className="h-full w-full rounded-[3mm] object-contain"
-            />
-            {overlay}
-          </>
-        ) : (
-          empty
-        )}
+        <div className="relative min-h-0 flex-1">
+          {scene ? (
+            <>
+              {/* Posizionata in assoluto con max-w/max-h: il box coincide con l'immagine, così gli angoli arrotondati si vedono */}
+              <img
+                src={sceneImage(scene.code, character, imageVariant)}
+                alt={sceneTitle(scene, character)}
+                draggable={false}
+                className="absolute inset-0 m-auto max-h-full max-w-full rounded-[3mm]"
+              />
+              {overlay}
+            </>
+          ) : (
+            empty
+          )}
+        </div>
       </div>
 
       {text}
