@@ -3,3 +3,8 @@ dist
 *.local
 .vercel
 .DS_Store
+
+# Generati da scripts/build-images.mjs
+public/library/webp
+public/library/thumbs
+*.tsbuildinfo

@@ -10,12 +10,13 @@ import {
   type Modifier,
 } from '@dnd-kit/core'
 import { SortableContext, arrayMove, rectSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
+import type { ImageVariant } from '../lib/catalog'
 import { templates } from '../lib/sheet'
 import type { Cell, Sheet } from '../types'
-import { SheetCell } from './SheetCell'
+import { PrintSheetCell, SortableSheetCell } from './SheetCell'
 
-interface Props {
+interface EditProps {
   sheet: Sheet
   /** Scala dell'anteprima: serve a correggere lo spostamento durante il trascinamento */
   scale: number
@@ -23,8 +24,8 @@ interface Props {
   onChooseScene: (index: number) => void
 }
 
-/** Pagina A4 (210 × 297 mm, margini 10 mm): è il DOM che verrà esportato in PDF. */
-export function SheetView({ sheet, scale, onChange, onChooseScene }: Props) {
+/** Pagina A4 modificabile, per il composer. */
+export function SheetView({ sheet, scale, onChange, onChooseScene }: EditProps) {
   const template = templates[sheet.template]
 
   const sensors = useSensors(
@@ -57,56 +58,122 @@ export function SheetView({ sheet, scale, onChange, onChooseScene }: Props) {
   }
 
   return (
-    <div
-      className="flex h-[297mm] w-[210mm] flex-col gap-[4mm] bg-white p-[10mm] font-sans text-ink"
-      data-sheet
-    >
-      <header className="flex shrink-0 flex-col items-center gap-[1mm]">
+    <SheetPage
+      sheet={sheet}
+      header={
+        <>
+          <input
+            value={sheet.title}
+            onChange={(e) => onChange({ title: e.target.value })}
+            placeholder="Titolo della scheda"
+            aria-label="Titolo"
+            className={titleClass}
+          />
+          <input
+            value={sheet.subtitle}
+            onChange={(e) => onChange({ subtitle: e.target.value })}
+            placeholder="Sottotitolo (facoltativo)"
+            aria-label="Sottotitolo"
+            className={subtitleClass}
+          />
+        </>
+      }
+      grid={(cells) => (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={[unscale]} onDragEnd={handleDragEnd}>
+          <SortableContext items={sheet.cells.map((c) => c.id)} strategy={rectSortingStrategy}>
+            {cells(
+              sheet.cells.map((cell, i) => (
+                <SortableSheetCell
+                  key={cell.id}
+                  cell={cell}
+                  index={i}
+                  character={sheet.character}
+                  numbered={template.numbered}
+                  onChoose={() => onChooseScene(i)}
+                  onClear={() => updateCell(i, { code: null, text: null })}
+                  onChange={(patch) => updateCell(i, patch)}
+                />
+              )),
+            )}
+          </SortableContext>
+        </DndContext>
+      )}
+      rememberLine={(line, i) => (
         <input
-          value={sheet.title}
-          onChange={(e) => onChange({ title: e.target.value })}
-          placeholder="Titolo della scheda"
-          aria-label="Titolo"
-          className="sheet-field text-center text-[9mm] font-bold leading-tight"
+          value={line}
+          onChange={(e) => setRememberLine(i, e.target.value)}
+          placeholder={`Frase ${i + 1}`}
+          aria-label={`Ricordo sempre, frase ${i + 1}`}
+          className={rememberClass}
         />
-        <input
-          value={sheet.subtitle}
-          onChange={(e) => onChange({ subtitle: e.target.value })}
-          placeholder="Sottotitolo (facoltativo)"
-          aria-label="Sottotitolo"
-          className="sheet-field text-center text-[5mm] leading-tight text-muted"
-        />
-      </header>
+      )}
+    />
+  )
+}
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        modifiers={[unscale]}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext items={sheet.cells.map((c) => c.id)} strategy={rectSortingStrategy}>
-          <div
-            className="grid min-h-0 flex-1 gap-[4mm]"
-            style={{
-              gridTemplateColumns: `repeat(${template.cols}, minmax(0, 1fr))`,
-              gridTemplateRows: `repeat(${template.rows}, minmax(0, 1fr))`,
-            }}
-          >
-            {sheet.cells.map((cell, i) => (
-              <SheetCell
-                key={cell.id}
-                cell={cell}
-                index={i}
-                character={sheet.character}
-                numbered={template.numbered}
-                onChoose={() => onChooseScene(i)}
-                onClear={() => updateCell(i, { code: null, text: null })}
-                onChange={(patch) => updateCell(i, patch)}
-              />
-            ))}
-          </div>
-        </SortableContext>
-      </DndContext>
+/** Pagina A4 statica: è quella che finisce nel PDF. */
+export function PrintSheetView({ sheet, imageVariant }: { sheet: Sheet; imageVariant: ImageVariant }) {
+  const template = templates[sheet.template]
+  return (
+    <SheetPage
+      sheet={sheet}
+      header={
+        <>
+          <h1 className={titleClass}>{sheet.title}</h1>
+          {sheet.subtitle && <p className={subtitleClass}>{sheet.subtitle}</p>}
+        </>
+      }
+      grid={(cells) =>
+        cells(
+          sheet.cells.map((cell, i) => (
+            <PrintSheetCell
+              key={cell.id}
+              cell={cell}
+              index={i}
+              character={sheet.character}
+              numbered={template.numbered}
+              imageVariant={imageVariant}
+            />
+          )),
+        )
+      }
+      rememberLine={(line) => <span className={`${rememberClass} min-h-[1lh]`}>{line}</span>}
+    />
+  )
+}
+
+const titleClass = 'sheet-field text-center text-[9mm] font-bold leading-tight'
+const subtitleClass = 'sheet-field text-center text-[5mm] leading-tight text-muted'
+const rememberClass = 'sheet-field px-[1mm] py-[0.5mm]'
+
+interface PageProps {
+  sheet: Sheet
+  header: ReactNode
+  /** Riceve la funzione che dispone i riquadri nella griglia del modello */
+  grid: (cells: (children: ReactNode) => ReactNode) => ReactNode
+  rememberLine: (line: string, index: number) => ReactNode
+}
+
+/** Impaginazione A4 (210 × 297 mm, margini 10 mm), comune a schermo e PDF. */
+function SheetPage({ sheet, header, grid, rememberLine }: PageProps) {
+  const template = templates[sheet.template]
+  const layoutCells = (children: ReactNode) => (
+    <div
+      className="grid min-h-0 flex-1 gap-[4mm]"
+      style={{
+        gridTemplateColumns: `repeat(${template.cols}, minmax(0, 1fr))`,
+        gridTemplateRows: `repeat(${template.rows}, minmax(0, 1fr))`,
+      }}
+    >
+      {children}
+    </div>
+  )
+
+  return (
+    <div className="flex h-[297mm] w-[210mm] flex-col gap-[4mm] bg-white p-[10mm] font-sans text-ink">
+      <header className="flex shrink-0 flex-col items-center gap-[1mm]">{header}</header>
+
+      {grid(layoutCells)}
 
       {sheet.remember.enabled && (
         <section className="shrink-0 rounded-[4mm] bg-butter px-[6mm] py-[3mm]">
@@ -115,13 +182,7 @@ export function SheetView({ sheet, scale, onChange, onChooseScene }: Props) {
             {sheet.remember.lines.map((line, i) => (
               <li key={i} className="flex items-center gap-[2mm] text-[4.6mm] font-bold">
                 <span className="text-peach">●</span>
-                <input
-                  value={line}
-                  onChange={(e) => setRememberLine(i, e.target.value)}
-                  placeholder={`Frase ${i + 1}`}
-                  aria-label={`Ricordo sempre, frase ${i + 1}`}
-                  className="sheet-field px-[1mm] py-[0.5mm]"
-                />
+                {rememberLine(line, i)}
               </li>
             ))}
           </ol>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ExportKind } from '../lib/exportPdf'
 import { templates } from '../lib/sheet'
 import type { Sheet } from '../types'
 import { CharacterToggle } from './CharacterToggle'
@@ -18,6 +19,20 @@ interface Props {
 export function Composer({ sheet, onChange, onChooseScene, onReset }: Props) {
   const scale = useFitScale()
   const filled = sheet.cells.filter((c) => c.code).length
+  const [exporting, setExporting] = useState<ExportKind | null>(null)
+
+  async function handleExport(kind: ExportKind) {
+    setExporting(kind)
+    try {
+      const { exportPdf } = await import('../lib/exportPdf')
+      await exportPdf(sheet, kind)
+    } catch (err) {
+      console.error(err)
+      alert('Non è stato possibile creare il PDF. Riprova; se succede ancora, ricarica la pagina.')
+    } finally {
+      setExporting(null)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
@@ -48,6 +63,25 @@ export function Composer({ sheet, onChange, onChooseScene, onReset }: Props) {
           frasi e orari si modificano direttamente sul foglio.
         </p>
 
+        <Field label="Scarica">
+          <div className="flex flex-col gap-2">
+            <ExportButton
+              label="PDF stampa"
+              hint="A4 alta qualità, da plastificare"
+              busy={exporting === 'stampa'}
+              disabled={exporting !== null}
+              onClick={() => handleExport('stampa')}
+            />
+            <ExportButton
+              label="PDF WhatsApp"
+              hint="File leggero da inviare"
+              busy={exporting === 'whatsapp'}
+              disabled={exporting !== null}
+              onClick={() => handleExport('whatsapp')}
+            />
+          </div>
+        </Field>
+
         <button
           onClick={() => {
             if (confirm('Vuoi iniziare una scheda nuova? Quella attuale verrà cancellata.')) onReset()
@@ -69,6 +103,31 @@ export function Composer({ sheet, onChange, onChooseScene, onReset }: Props) {
         </div>
       </div>
     </div>
+  )
+}
+
+function ExportButton({
+  label,
+  hint,
+  busy,
+  disabled,
+  onClick,
+}: {
+  label: string
+  hint: string
+  busy: boolean
+  disabled: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex flex-col items-start rounded-2xl bg-sky-soft px-4 py-2.5 text-left transition hover:bg-sky/25 disabled:cursor-wait disabled:opacity-60"
+    >
+      <span className="font-bold">{busy ? 'Preparo il PDF…' : label}</span>
+      <span className="text-xs text-muted">{hint}</span>
+    </button>
   )
 }
 

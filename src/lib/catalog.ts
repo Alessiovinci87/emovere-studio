@@ -13,8 +13,16 @@ export function sceneTitle(scene: Scene, character: Character): string {
   return character === 'bambina' ? scene.title_f : scene.title_m
 }
 
-export function sceneImage(code: string, character: Character): string {
-  return `/library/scenes/${character}/${code}_${character}.png`
+/**
+ * - `web`: WebP qualità 90 a dimensione piena (schermo, PDF WhatsApp)
+ * - `original`: PNG originale (PDF stampa)
+ */
+export type ImageVariant = 'web' | 'original'
+
+export function sceneImage(code: string, character: Character, variant: ImageVariant = 'web'): string {
+  return variant === 'original'
+    ? `/library/scenes/${character}/${code}_${character}.png`
+    : `/library/webp/${character}/${code}_${character}.webp`
 }
 
 export function sceneThumb(code: string, character: Character): string {
