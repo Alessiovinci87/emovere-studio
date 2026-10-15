@@ -15,6 +15,14 @@ import type { Character, Scene, Sheet, StoreData, TemplateId } from './types'
 type View = { name: 'cartelle' } | { name: 'cartella'; id: string } | { name: 'scheda' } | { name: 'libreria' }
 type FolderAction = { mode: 'save' } | { mode: 'duplicate'; sheetId: string } | { mode: 'move'; sheetId: string }
 type FolderChoice = { folderId: string } | { newName: string }
+/** Voce della cronologia del browser: schermata, scheda aperta e profondità (per il tasto Indietro) */
+type NavEntry = { view: View; currentId: string | null; depth: number }
+
+/** Dopo una ricarica della pagina si riparte dalla stessa schermata, con la cronologia intatta. */
+const initialNav: NavEntry =
+  (window.history.state as NavEntry | null)?.view
+    ? (window.history.state as NavEntry)
+    : { view: { name: 'cartelle' }, currentId: null, depth: 0 }
 
 const STORAGE_FULL = 'Spazio del browser esaurito: le ultime modifiche non sono salvate. Esporta un backup.'
 
@@ -23,8 +31,8 @@ export default function App() {
   /** Scheda non ancora salvata in una cartella */
   const [draft, setDraft] = useState<Sheet>(store.loadDraft)
   /** Scheda aperta nel composer: id di una scheda salvata, null = bozza */
-  const [currentId, setCurrentId] = useState<string | null>(null)
-  const [view, setView] = useState<View>({ name: 'cartelle' })
+  const [currentId, setCurrentId] = useState<string | null>(initialNav.currentId)
+  const [view, setView] = useState<View>(initialNav.view)
   const [libraryCharacter, setLibraryCharacter] = useState<Character>('bambina')
 
   const [pickingIndex, setPickingIndex] = useState<number | null>(null)
@@ -33,6 +41,8 @@ export default function App() {
   const [newSheetFolder, setNewSheetFolder] = useState<{ folderId: string | null } | null>(null)
   const [todoOpen, setTodoOpen] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+  const [navDepth, setNavDepth] = useState(initialNav.depth)
+  const [lastBackup, setLastBackup] = useState<string | null>(store.loadLastBackup)
 
   useEffect(() => {
     if (!store.saveData(data)) setToast(STORAGE_FULL)
@@ -46,6 +56,38 @@ export default function App() {
     return () => clearTimeout(t)
   }, [toast])
 
+  // Navigazione legata alla cronologia del browser: funzionano il tasto Indietro dell'app,
+  // quello del browser e il gesto "indietro" su tablet e telefono.
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      const entry = e.state as NavEntry | null
+      if (!entry?.view) return
+      setView(entry.view)
+      setCurrentId(entry.currentId)
+      setNavDepth(entry.depth)
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+
+  // Tiene aggiornata la voce corrente (es. dopo il salvataggio la scheda aperta cambia id)
+  useEffect(() => {
+    window.history.replaceState({ view, currentId, depth: navDepth } satisfies NavEntry, '')
+  }, [view, currentId, navDepth])
+
+  /** Va a una schermata. Con replace non crea una nuova voce (es. dopo un'eliminazione). */
+  function navigate(next: View, nextCurrentId: string | null = currentId, replace = false) {
+    const depth = replace ? navDepth : navDepth + 1
+    if (!replace) window.history.pushState({ view: next, currentId: nextCurrentId, depth } satisfies NavEntry, '')
+    setView(next)
+    setCurrentId(nextCurrentId)
+    setNavDepth(depth)
+  }
+
+  const goHome = () => {
+    if (view.name !== 'cartelle') navigate({ name: 'cartelle' })
+  }
+
   const saved = currentId ? data.sheets.find((s) => s.id === currentId) : undefined
   const sheet = saved ?? draft
   const sheetFolder = data.folders.find((f) => f.id === sheet.folderId)
@@ -54,14 +96,16 @@ export default function App() {
     () => dueReminders(draft.reminder ? [...data.sheets, draft] : data.sheets, data.folders),
     [data, draft],
   )
+  const backupDue = store.isBackupDue(data, lastBackup)
+  const todoCount = due.length + (backupDue ? 1 : 0)
 
   // All'apertura dell'app: se c'è qualcosa in scadenza, il pannello "Da fare" si apre da solo
   const checkedDue = useRef(false)
   useEffect(() => {
     if (checkedDue.current) return
     checkedDue.current = true
-    if (due.length > 0) setTodoOpen(true)
-  }, [due])
+    if (todoCount > 0) setTodoOpen(true)
+  }, [todoCount])
 
   const updateCurrent = useCallback(
     (patch: Partial<Sheet>) => {
@@ -72,8 +116,7 @@ export default function App() {
   )
 
   function openSheet(id: string) {
-    setCurrentId(id === draft.id ? null : id)
-    setView({ name: 'scheda' })
+    navigate({ name: 'scheda' }, id === draft.id ? null : id)
   }
 
   function placeScene(index: number, scene: Scene) {
@@ -129,20 +172,18 @@ export default function App() {
       const folder = data.folders.find((f) => f.id === folderId)!
       const created = { ...createSheet(template, folder.name), folderId }
       setData((d) => store.upsertSheet(d, created))
-      setCurrentId(created.id)
+      navigate({ name: 'scheda' }, created.id)
     } else {
       const draftHasWork = draft.cells.some((c) => c.code) || draft.notes.trim() !== ''
       if (draftHasWork && !confirm('C’è una scheda non salvata: verrà sostituita da quella nuova. Continuare?')) return
       setDraft(createSheet(template))
-      setCurrentId(null)
+      navigate({ name: 'scheda' }, null)
     }
-    setView({ name: 'scheda' })
   }
 
   function deleteFolder(id: string) {
     setData((d) => store.deleteFolder(d, id))
-    if (saved?.folderId === id) setCurrentId(null)
-    setView({ name: 'cartelle' })
+    navigate({ name: 'cartelle' }, saved?.folderId === id ? null : currentId, true)
   }
 
   function deleteSheet(id: string) {
@@ -162,6 +203,10 @@ export default function App() {
   function exportBackup() {
     const json = JSON.stringify(store.makeBackup(data), null, 2)
     downloadBlob(new Blob([json], { type: 'application/json' }), `emovere-backup_${todayISO()}.json`)
+    const now = new Date().toISOString()
+    store.saveLastBackup(now)
+    setLastBackup(now)
+    setToast('Backup scaricato')
   }
 
   async function importBackup(file: File) {
@@ -175,8 +220,7 @@ export default function App() {
       )
       if (!ok) return
       setData(incoming)
-      setCurrentId(null)
-      setView({ name: 'cartelle' })
+      navigate({ name: 'cartelle' }, null, true)
       setToast('Backup importato')
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Non è stato possibile leggere il backup.')
@@ -185,7 +229,7 @@ export default function App() {
 
   const closePicker = useCallback(() => setPickingIndex(null), [])
   const closeSymbol = useCallback(() => setSymbolIndex(null), [])
-  const openFolder = (id: string) => setView({ name: 'cartella', id })
+  const openFolder = (id: string) => navigate({ name: 'cartella', id })
   const currentFolderView = view.name === 'cartella' ? data.folders.find((f) => f.id === view.id) : undefined
 
   const navItems: { id: View['name']; label: string }[] = [
@@ -198,9 +242,30 @@ export default function App() {
   return (
     <div className="min-h-screen">
       <header className="mx-auto flex max-w-[96rem] flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-6">
-        <h1 className="text-xl font-bold">
-          Emovere <span className="text-peach">Studio</span>
-        </h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold">
+            <button onClick={goHome} title="Torna alla home (cartelle)" className="rounded-full px-1 hover:opacity-80">
+              Emovere <span className="text-peach">Studio</span>
+            </button>
+          </h1>
+          <button
+            onClick={goHome}
+            aria-label="Home"
+            title="Home: tutte le cartelle"
+            className="rounded-full bg-sand px-3 py-2 font-bold text-muted transition hover:text-ink"
+          >
+            🏠 Home
+          </button>
+          {navDepth > 0 && (
+            <button
+              onClick={() => window.history.back()}
+              title="Torna alla schermata precedente"
+              className="rounded-full bg-sand px-3 py-2 font-bold text-muted transition hover:text-ink"
+            >
+              ← Indietro
+            </button>
+          )}
+        </div>
         <nav className="flex flex-wrap items-center gap-2">
           <div className="inline-flex rounded-full bg-sand p-1">
             {navItems.map((item) => (
@@ -208,7 +273,7 @@ export default function App() {
                 key={item.id}
                 onClick={() => {
                   if (item.id === 'libreria') setLibraryCharacter(sheet.character)
-                  setView({ name: item.id } as View)
+                  if (item.id !== activeNav || view.name === 'cartella') navigate({ name: item.id } as View)
                 }}
                 aria-current={activeNav === item.id ? 'page' : undefined}
                 className={`rounded-full px-4 py-2 font-bold transition sm:px-5 ${
@@ -224,12 +289,12 @@ export default function App() {
             className="relative rounded-full bg-sand px-4 py-2 font-bold text-muted transition hover:text-ink"
           >
             Da fare
-            {due.length > 0 && (
+            {todoCount > 0 && (
               <span
                 className="absolute -right-1.5 -top-1.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-peach px-1.5 text-xs font-bold text-white"
-                aria-label={`${due.length} promemoria`}
+                aria-label={`${todoCount} promemoria`}
               >
-                {due.length}
+                {todoCount}
               </span>
             )}
           </button>
@@ -257,7 +322,7 @@ export default function App() {
             key={currentFolderView.id}
             folder={currentFolderView}
             sheets={data.sheets.filter((s) => s.folderId === currentFolderView.id)}
-            onBack={() => setView({ name: 'cartelle' })}
+            onBack={goHome}
             onRename={(name) => setData((d) => store.updateFolder(d, currentFolderView.id, { name }))}
             onNotes={(notes) => setData((d) => store.updateFolder(d, currentFolderView.id, { notes }))}
             onDelete={() => deleteFolder(currentFolderView.id)}
@@ -270,7 +335,12 @@ export default function App() {
           />
         )}
         {view.name === 'cartella' && !currentFolderView && (
-          <p className="text-muted">Questa cartella non esiste più.</p>
+          <p className="text-muted">
+            Questa cartella non esiste più.{' '}
+            <button onClick={goHome} className="font-bold text-sky underline">
+              Torna alla home
+            </button>
+          </p>
         )}
 
         {view.name === 'scheda' && (
@@ -343,6 +413,8 @@ export default function App() {
       {todoOpen && (
         <TodoPanel
           items={due}
+          backup={backupDue ? { lastExport: lastBackup } : null}
+          onBackup={exportBackup}
           onOpen={(id) => {
             setTodoOpen(false)
             openSheet(id)

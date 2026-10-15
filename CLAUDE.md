@@ -40,7 +40,8 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
    - Click su un riquadro vuoto → si apre la libreria → la vignetta scelta entra nel riquadro
    - Sotto ogni vignetta: frase modificabile (default = titolo della scena per il personaggio scelto)
    - Numero grande nel riquadro (routine), orario opzionale per riquadro
-   - Riordino riquadri con drag and drop
+   - Riordino riquadri con drag and drop (su touch: tieni premuto e trascina)
+   - Comandi del riquadro pieno (Cambia, Simbolo, Svuota): su desktop compaiono con l'hover; su schermi touch (`pointer: coarse`) un tocco seleziona il riquadro e mostra la barra con pulsanti più grandi, un tocco fuori la chiude. I pulsanti nascosti non sono mai cliccabili (`pointer-events: none`)
    - Riquadro finale opzionale "Ricordo sempre" con 3 frasi modificabili
    - Simboli SVG sopra la vignetta (V verde, X rossa, divieto), in uno dei 4 angoli, visibili anche nel PDF (`SymbolIcon`)
    - Nome del bambino (facoltativo) inserito nel titolo: "La mia mattina" + Sofia → "La mattina di Sofia", altri titoli → "… di Sofia". Se la scheda è in una cartella, il nome della cartella viene proposto in automatico (nuova scheda, salvataggio, duplica/sposta se il nome era quello della cartella di partenza)
@@ -49,9 +50,11 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
    - Una cartella per bambino (solo nome o iniziali): crea, rinomina, elimina (elimina anche le sue schede), appunti
    - Schermata principale: elenco cartelle con contatori per stato; dentro la cartella, schede raggruppate per stato
    - Schede: salva (una scheda nuova è una bozza finché non la si salva in una cartella; dopo, le modifiche si salvano da sole), apri, duplica (anche in un'altra cartella), sposta, elimina, appunti
-   - Stato: Da fare, In lavorazione, Pronta, Stampata/Consegnata. Nella cartella un clic sull'etichetta passa allo stato successivo; nel composer si sceglie direttamente
+   - Stato: Da fare, In lavorazione, Pronta, Stampata/Consegnata. Nella cartella un clic sull'etichetta apre un menu con i 4 stati; nel composer si sceglie direttamente
    - Promemoria: una data e un tipo (Creare, Stampare, Consegnare, Rivedere) per scheda. All'apertura, se ci sono promemoria di oggi o scaduti non fatti, si apre il pannello "Da fare"; il menu mostra un badge con il numero. "Aggiungi al calendario" scarica un .ics (evento di un giorno, avviso alle 9)
-   - Backup: "Esporta tutto" (JSON con cartelle e schede, non la bozza) e "Importa backup" (sostituisce tutto, dopo conferma)
+   - Backup: "Esporta tutto" (JSON con cartelle e schede, non la bozza) e "Importa backup" (sostituisce tutto, dopo conferma). La data dell'ultimo export è in localStorage (`emovere.lastBackup.v1`): se ci sono schede salvate e il backup manca o ha più di 7 giorni, il pannello "Da fare" mostra "Fai un backup" con il pulsante diretto (conta nel badge)
+   - Dopo il PDF di una bozza non salvata si propone di salvarla in una cartella ("No, grazie" non la ripropone per quella bozza)
+   - Navigazione: tasti "Home" (cartelle) e "← Indietro" nell'intestazione, anche il logo porta alla home. Le schermate sono voci della cronologia del browser, quindi funzionano anche il tasto indietro del browser e il gesto indietro su tablet/telefono; dopo una ricarica si resta sulla stessa schermata
    - Dati in `src/lib/store.ts` (operazioni pure `StoreData → StoreData`); le schede salvate con versioni precedenti vengono completate da `normalizeSheet`
 5. **Export**: "PDF stampa" (A4, 300 dpi, margini 10 mm, pronto da plastificare) e "PDF WhatsApp" (immagini compresse, file leggero).
 

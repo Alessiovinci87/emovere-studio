@@ -3,6 +3,7 @@ import type { ExportKind } from '../lib/exportPdf'
 import { changeTemplate, retitleForName, templateList, templates } from '../lib/sheet'
 import type { Folder, Sheet, TemplateId } from '../types'
 import { CharacterToggle } from './CharacterToggle'
+import { Modal } from './Modal'
 import { ReminderEditor } from './ReminderEditor'
 import { SheetView } from './SheetView'
 import { StatusPicker } from './Status'
@@ -27,12 +28,16 @@ export function Composer({ sheet, folder, onChange, onChooseScene, onChooseSymbo
   const scale = useFitScale()
   const filled = sheet.cells.filter((c) => c.code).length
   const [exporting, setExporting] = useState<ExportKind | null>(null)
+  const [askSave, setAskSave] = useState(false)
+  /** Bozza per cui si è già risposto "No, grazie": non si ripropone a ogni PDF */
+  const declinedFor = useRef<string | null>(null)
 
   async function handleExport(kind: ExportKind) {
     setExporting(kind)
     try {
       const { exportPdf } = await import('../lib/exportPdf')
       await exportPdf(sheet, kind)
+      if (!folder && declinedFor.current !== sheet.id) setAskSave(true)
     } catch (err) {
       console.error(err)
       alert('Non è stato possibile creare il PDF. Riprova; se succede ancora, ricarica la pagina.')
@@ -116,8 +121,9 @@ export function Composer({ sheet, folder, onChange, onChooseScene, onChooseSymbo
         </label>
 
         <p className="text-sm leading-relaxed text-muted">
-          Clicca su un riquadro per scegliere la vignetta; passandoci sopra puoi cambiarla o aggiungere un simbolo.
-          Trascina i riquadri per cambiare l'ordine. Titolo, frasi e orari si modificano sul foglio.
+          Clicca su un riquadro vuoto per scegliere la vignetta. Su un riquadro pieno passa sopra (o toccalo, su
+          tablet) per cambiarla, svuotarla o aggiungere un simbolo. Trascina i riquadri per cambiare l'ordine (su
+          tablet: tieni premuto e trascina). Titolo, frasi e orari si modificano sul foglio.
         </p>
 
         <Field label="Scarica">
@@ -168,6 +174,36 @@ export function Composer({ sheet, folder, onChange, onChooseScene, onChooseSymbo
         </Field>
         <NotesField value={sheet.notes} onChange={(notes) => onChange({ notes })} />
       </aside>
+
+      {askSave && (
+        <Modal title="Salvare la scheda?" onClose={() => setAskSave(false)} size="sm">
+          <div className="flex flex-col gap-4">
+            <p className="leading-relaxed">
+              Il PDF è pronto. Questa scheda però non è ancora in una cartella: salvala per ritrovarla e modificarla
+              in seguito.
+            </p>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                onClick={() => {
+                  declinedFor.current = sheet.id
+                  setAskSave(false)
+                }}
+              >
+                No, grazie
+              </Button>
+              <Button
+                tone="primary"
+                onClick={() => {
+                  setAskSave(false)
+                  onSave()
+                }}
+              >
+                Salva in una cartella
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

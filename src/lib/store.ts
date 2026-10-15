@@ -142,6 +142,33 @@ export function countByStatus(sheets: Sheet[]): Record<SheetStatus, number> {
 
 // ——— Backup ———
 
+const LAST_BACKUP_KEY = 'emovere.lastBackup.v1'
+const BACKUP_INTERVAL_DAYS = 7
+
+/** Data dell'ultimo "Esporta tutto" (ISO), null se mai fatto. */
+export function loadLastBackup(): string | null {
+  try {
+    return localStorage.getItem(LAST_BACKUP_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function saveLastBackup(iso: string): void {
+  try {
+    localStorage.setItem(LAST_BACKUP_KEY, iso)
+  } catch {
+    // non critico: al massimo il promemoria del backup ricompare
+  }
+}
+
+/** Serve un backup se ci sono schede salvate e l'ultimo è più vecchio di 7 giorni (o non c'è). */
+export function isBackupDue(data: StoreData, lastBackup: string | null, now = Date.now()): boolean {
+  if (data.sheets.length === 0) return false
+  if (!lastBackup) return true
+  return now - new Date(lastBackup).getTime() > BACKUP_INTERVAL_DAYS * 24 * 60 * 60 * 1000
+}
+
 const BACKUP_APP = 'emovere-studio'
 
 export interface Backup extends StoreData {

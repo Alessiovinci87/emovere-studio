@@ -10,9 +10,10 @@ import {
   type Modifier,
 } from '@dnd-kit/core'
 import { SortableContext, arrayMove, rectSortingStrategy, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
-import { Children, Fragment, useMemo, type ReactNode } from 'react'
+import { Children, Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { ImageVariant } from '../lib/catalog'
 import { templates } from '../lib/sheet'
+import { useCoarsePointer } from '../lib/useCoarsePointer'
 import type { Cell, Sheet } from '../types'
 import { PrintSheetCell, SortableSheetCell } from './SheetCell'
 
@@ -28,6 +29,18 @@ interface EditProps {
 /** Pagina A4 modificabile, per il composer. */
 export function SheetView({ sheet, scale, onChange, onChooseScene, onChooseSymbol }: EditProps) {
   const template = templates[sheet.template]
+  const touch = useCoarsePointer()
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  // Touch: un tocco fuori dal riquadro selezionato lo deseleziona
+  useEffect(() => {
+    if (!selectedId) return
+    const onPointerDown = (e: PointerEvent) => {
+      if (!(e.target as HTMLElement).closest(`[data-cell-id="${selectedId}"]`)) setSelectedId(null)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => document.removeEventListener('pointerdown', onPointerDown)
+  }, [selectedId])
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -90,6 +103,8 @@ export function SheetView({ sheet, scale, onChange, onChooseScene, onChooseSymbo
                   index={i}
                   character={sheet.character}
                   template={template}
+                  selected={touch && selectedId === cell.id}
+                  onSelect={touch ? () => setSelectedId(cell.id) : undefined}
                   onChoose={() => onChooseScene(i)}
                   onSymbol={() => onChooseSymbol(i)}
                   onClear={() => updateCell(i, { code: null, text: null, symbol: null })}

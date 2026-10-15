@@ -89,12 +89,6 @@ export function statusInfo(id: SheetStatus) {
   return statuses.find((s) => s.id === id)!
 }
 
-/** Stato successivo, per il cambio con un clic (dopo l'ultimo si ricomincia). */
-export function nextStatus(id: SheetStatus): SheetStatus {
-  const i = statuses.findIndex((s) => s.id === id)
-  return statuses[(i + 1) % statuses.length].id
-}
-
 export const reminderKinds: { id: ReminderKind; label: string }[] = [
   { id: 'creare', label: 'Creare' },
   { id: 'stampare', label: 'Stampare' },

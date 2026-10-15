@@ -14,6 +14,10 @@ interface Props {
 }
 
 interface EditProps extends Props {
+  /** Touch: riquadro selezionato con un tocco, mostra la barra dei comandi */
+  selected: boolean
+  /** Touch: un tocco sul riquadro pieno lo seleziona (assente su desktop, dove c'è l'hover) */
+  onSelect?: () => void
   onChoose: () => void
   onSymbol: () => void
   onClear: () => void
@@ -28,21 +32,36 @@ const stopDrag = {
 }
 
 /** Riquadro modificabile e trascinabile, per il composer. */
-export function SortableSheetCell({ onChoose, onSymbol, onClear, onChange, ...props }: EditProps) {
+export function SortableSheetCell({ selected, onSelect, onChoose, onSymbol, onClear, onChange, ...props }: EditProps) {
   const { cell, index, character } = props
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: cell.id,
   })
   const scene = cell.code ? getScene(cell.code) : undefined
   const defaultText = scene ? sceneTitle(scene, character) : ''
+  // Comandi visibili (e cliccabili) solo con hover, focus o selezione: mai pulsanti invisibili sotto il dito
+  const toolsVisible = selected
+    ? 'opacity-100'
+    : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100'
 
   return (
     <CellFrame
       {...props}
       frameRef={setNodeRef}
       frameStyle={{ transform: CSS.Translate.toString(transform), transition, zIndex: isDragging ? 10 : undefined }}
-      frameProps={{ ...attributes, ...listeners, 'aria-label': `Riquadro ${index + 1}` }}
-      className={`cursor-grab active:cursor-grabbing ${isDragging ? 'opacity-90 shadow-xl' : ''}`}
+      frameProps={{
+        ...attributes,
+        ...listeners,
+        'aria-label': `Riquadro ${index + 1}`,
+        'data-cell-id': cell.id,
+        onClick: (e) => {
+          // I tocchi su campi e pulsanti fanno il loro lavoro; il resto del riquadro lo seleziona
+          if (onSelect && scene && !(e.target as HTMLElement).closest('input, textarea, button')) onSelect()
+        },
+      } as HTMLAttributes<HTMLDivElement>}
+      className={`cursor-grab active:cursor-grabbing ${isDragging ? 'opacity-90 shadow-xl' : ''} ${
+        selected ? 'outline-[1mm] outline-offset-[0.5mm] outline-sky outline-solid' : ''
+      }`}
       imageVariant="web"
       time={
         <input
@@ -51,15 +70,20 @@ export function SortableSheetCell({ onChoose, onSymbol, onClear, onChange, ...pr
           placeholder="ore"
           maxLength={5}
           aria-label={`Orario riquadro ${index + 1}`}
-          className={`${timeClass} ${cell.time ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
+          className={`${timeClass} ${cell.time || selected ? '' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
           {...stopDrag}
         />
       }
       overlay={
-        <div className="absolute inset-x-0 bottom-[1mm] z-[2] flex justify-center gap-[1.5mm] opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
-          <CellButton onClick={onChoose}>Cambia</CellButton>
-          <CellButton onClick={onSymbol}>Simbolo</CellButton>
-          <CellButton onClick={onClear}>Svuota</CellButton>
+        <div
+          className={`absolute z-[2] flex justify-center transition ${toolsVisible} ${
+            // Touch: pulsanti più grandi, in colonna al centro della vignetta
+            selected ? 'inset-0 flex-col items-center gap-[2mm]' : 'inset-x-0 bottom-[1mm] gap-[1.5mm]'
+          }`}
+        >
+          <CellButton big={selected} onClick={onChoose}>Cambia</CellButton>
+          <CellButton big={selected} onClick={onSymbol}>Simbolo</CellButton>
+          <CellButton big={selected} onClick={onClear}>Svuota</CellButton>
         </div>
       }
       empty={
@@ -202,11 +226,13 @@ function CellFrame({
   )
 }
 
-function CellButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+function CellButton({ big, onClick, children }: { big?: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
       onClick={onClick}
-      className="rounded-full bg-white/95 px-[3mm] py-[1mm] text-[3.2mm] font-bold text-ink shadow hover:bg-sky-soft"
+      className={`rounded-full bg-white/95 font-bold text-ink shadow hover:bg-sky-soft ${
+        big ? 'min-w-[22mm] px-[4mm] py-[2mm] text-[4mm]' : 'px-[3mm] py-[1mm] text-[3.2mm]'
+      }`}
     >
       {children}
     </button>
