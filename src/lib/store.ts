@@ -1,4 +1,5 @@
 import type { Folder, Sheet, SheetStatus, StoreData } from '../types'
+import { normalizeSettings, type AppSettings } from './settings'
 import { createSheet, newId, normalizeSheet, retitleForName } from './sheet'
 
 // Tutto resta nel browser (localStorage) per il prototipo.
@@ -175,14 +176,16 @@ export interface Backup extends StoreData {
   app: typeof BACKUP_APP
   version: 1
   exportedAt: string
+  /** Impostazioni dell'app, logo compreso (assenti nei backup meno recenti) */
+  settings?: AppSettings
 }
 
-export function makeBackup(data: StoreData): Backup {
-  return { app: BACKUP_APP, version: 1, exportedAt: new Date().toISOString(), ...data }
+export function makeBackup(data: StoreData, settings: AppSettings): Backup {
+  return { app: BACKUP_APP, version: 1, exportedAt: new Date().toISOString(), ...data, settings }
 }
 
 /** Legge un file di backup; lancia un errore con un messaggio leggibile se non è valido. */
-export function parseBackup(text: string): { data: StoreData; exportedAt: string } {
+export function parseBackup(text: string): { data: StoreData; exportedAt: string; settings: AppSettings | null } {
   let json: Partial<Backup>
   try {
     json = JSON.parse(text)
@@ -192,5 +195,9 @@ export function parseBackup(text: string): { data: StoreData; exportedAt: string
   if (json.app !== BACKUP_APP || !Array.isArray(json.folders) || !Array.isArray(json.sheets)) {
     throw new Error('Il file non sembra un backup di Emovere Studio.')
   }
-  return { data: normalizeData(json), exportedAt: json.exportedAt ?? '' }
+  return {
+    data: normalizeData(json),
+    exportedAt: json.exportedAt ?? '',
+    settings: json.settings ? normalizeSettings(json.settings) : null,
+  }
 }

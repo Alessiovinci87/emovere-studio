@@ -1,8 +1,21 @@
-import type { Cell, ReminderKind, Sheet, SheetStatus, TemplateId } from '../types'
+import type { AgendaOptions, Cell, ReminderKind, Sheet, SheetStatus, TemplateId } from '../types'
 
 export interface Template {
   id: TemplateId
   label: string
+  /** A4 verticale o orizzontale */
+  orientation: 'portrait' | 'landscape'
+  /**
+   * - grid: riquadri in griglia
+   * - stack: uno sotto l'altro con freccia ↓ (Prima / Poi)
+   * - sequence: affiancati con freccia → (Prima – Adesso – Dopo)
+   * - agenda: giorni in colonna, momenti della giornata in riga
+   */
+  layout: 'grid' | 'stack' | 'sequence' | 'agenda'
+  /** false = la frase sotto la vignetta parte vuota (es. Agenda); true = titolo della scena */
+  defaultText: boolean
+  /** Riquadro evidenziato con un bordo più spesso (ADESSO) */
+  highlight?: number
   /** Gruppo mostrato nella scelta del modello */
   group: string
   cols: number
@@ -11,8 +24,6 @@ export interface Template {
   numbered: boolean
   /** Etichette fisse dei riquadri, es. Prima / Poi */
   cellLabels?: string[]
-  /** Freccia tra un riquadro e il successivo (Prima → Poi) */
-  arrows?: boolean
   /** Una riga per la galleria "Crea" */
   description: string
   /** Corpo della frase sotto la vignetta, in mm */
@@ -21,8 +32,25 @@ export interface Template {
 }
 
 export const templates: Record<TemplateId, Template> = {
+  'routine-4': {
+    id: 'routine-4',
+    orientation: 'portrait',
+    layout: 'grid',
+    defaultText: true,
+    description: 'Quattro passaggi grandi, per le sequenze brevi.',
+    label: 'Routine · 4 riquadri',
+    group: 'Routine',
+    cols: 2,
+    rows: 2,
+    numbered: true,
+    textMm: 6.5,
+    defaultTitle: 'La mia routine',
+  },
   'routine-6': {
     id: 'routine-6',
+    orientation: 'portrait',
+    layout: 'grid',
+    defaultText: true,
     description: 'Pochi passaggi grandi, numerati: ideale per iniziare.',
     label: 'Routine · 6 riquadri',
     group: 'Routine',
@@ -35,6 +63,9 @@ export const templates: Record<TemplateId, Template> = {
   },
   'routine-9': {
     id: 'routine-9',
+    orientation: 'portrait',
+    layout: 'grid',
+    defaultText: true,
     description: 'Una routine media, numerata, con orari facoltativi.',
     label: 'Routine · 9 riquadri',
     group: 'Routine',
@@ -46,6 +77,9 @@ export const templates: Record<TemplateId, Template> = {
   },
   'routine-12': {
     id: 'routine-12',
+    orientation: 'portrait',
+    layout: 'grid',
+    defaultText: true,
     description: 'La giornata o una routine lunga, passo dopo passo.',
     label: 'Routine · 12 riquadri',
     group: 'Routine',
@@ -57,6 +91,9 @@ export const templates: Record<TemplateId, Template> = {
   },
   'prima-poi': {
     id: 'prima-poi',
+    orientation: 'portrait',
+    layout: 'stack',
+    defaultText: true,
     description: 'Due vignette grandi: prima questo, poi quello.',
     label: 'Prima / Poi',
     group: 'Prima / Poi',
@@ -64,12 +101,14 @@ export const templates: Record<TemplateId, Template> = {
     rows: 2,
     numbered: false,
     cellLabels: ['Prima', 'Poi'],
-    arrows: true,
     textMm: 8,
     defaultTitle: 'Prima e poi',
   },
   'scelte-2': {
     id: 'scelte-2',
+    orientation: 'portrait',
+    layout: 'grid',
+    defaultText: true,
     description: 'Due possibilità tra cui scegliere.',
     label: 'Scelte · 2',
     group: 'Scelte',
@@ -81,6 +120,9 @@ export const templates: Record<TemplateId, Template> = {
   },
   'scelte-3': {
     id: 'scelte-3',
+    orientation: 'portrait',
+    layout: 'grid',
+    defaultText: true,
     description: 'Tre possibilità tra cui scegliere.',
     label: 'Scelte · 3',
     group: 'Scelte',
@@ -92,6 +134,9 @@ export const templates: Record<TemplateId, Template> = {
   },
   'scelte-4': {
     id: 'scelte-4',
+    orientation: 'portrait',
+    layout: 'grid',
+    defaultText: true,
     description: 'Quattro possibilità in una griglia 2 × 2.',
     label: 'Scelte · 4',
     group: 'Scelte',
@@ -101,6 +146,48 @@ export const templates: Record<TemplateId, Template> = {
     textMm: 6,
     defaultTitle: 'Le mie scelte',
   },
+  'prima-adesso-dopo': {
+    id: 'prima-adesso-dopo',
+    orientation: 'landscape',
+    layout: 'sequence',
+    defaultText: true,
+    description: 'Tre vignette grandi affiancate: prima, adesso, dopo.',
+    label: 'Prima – Adesso – Dopo',
+    group: 'Prima / Poi',
+    cols: 3,
+    rows: 1,
+    numbered: false,
+    cellLabels: ['Prima', 'Adesso', 'Dopo'],
+    highlight: 1,
+    textMm: 7,
+    defaultTitle: 'Prima, adesso, dopo',
+  },
+  agenda: {
+    id: 'agenda',
+    orientation: 'landscape',
+    layout: 'agenda',
+    defaultText: false,
+    description: 'La settimana: giorni in colonna, mattina, pomeriggio e sera.',
+    label: 'Agenda della settimana',
+    group: 'Agenda',
+    // Si conservano sempre 7 giorni × 4 momenti: cambiando giorni o righe non si perde nulla
+    cols: 7,
+    rows: 4,
+    numbered: false,
+    textMm: 3.4,
+    defaultTitle: 'La mia settimana',
+  },
+}
+
+export const WEEK_DAYS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
+
+export function defaultAgenda(): AgendaOptions {
+  return { days: 7, rows: 3, labels: ['Mattina', 'Pomeriggio', 'Sera', 'Notte'] }
+}
+
+/** Agenda: indice del riquadro per momento (riga) e giorno (colonna). */
+export function agendaIndex(row: number, day: number): number {
+  return row * 7 + day
 }
 
 export const templateList = Object.values(templates)
@@ -152,6 +239,11 @@ export function createSheet(template: TemplateId = 'routine-12', childName = '')
     remember: { enabled: false, lines: ['', '', ''] },
     doneCircle: false,
     cutouts: false,
+    uppercase: false,
+    timeMode: 'both',
+    showLogo: null,
+    coloring: false,
+    agenda: defaultAgenda(),
     folderId: null,
     status: 'da-fare',
     notes: '',
@@ -167,6 +259,7 @@ export function normalizeSheet(raw: Partial<Sheet>): Sheet {
   const base = createSheet(known ? raw.template : 'routine-12')
   const sheet = { ...base, ...raw, template: base.template } as Sheet
   sheet.cells = (raw.cells ?? base.cells).map((c) => ({ ...emptyCell(), ...c }))
+  sheet.agenda = { ...defaultAgenda(), ...raw.agenda }
   // Modello non più disponibile (es. la vecchia "Tabella a gettoni"): diventa Routine 12, vignette comprese
   if (!known) Object.assign(sheet, changeTemplate({ ...sheet, title: '' }, base.template), { title: sheet.title })
   return sheet

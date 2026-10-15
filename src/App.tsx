@@ -12,11 +12,15 @@ import { Button } from './components/ui'
 import { aiApi } from './lib/ai'
 import { setAiScenes } from './lib/catalog'
 import { downloadBlob } from './lib/download'
+import { coloringKey } from './lib/look'
+import { sheetFromPreset, type Preset } from './lib/presets'
+import { loadSettings, saveSettings, type AppSettings } from './lib/settings'
 import { dueReminders, todayISO } from './lib/reminders'
 import { useRouter, type Route, type Section, sectionOf } from './lib/router'
 import { createSheet } from './lib/sheet'
 import * as store from './lib/store'
 import type { Character, Scene, Sheet, StoreData, TemplateId } from './types'
+import { visibleIndexes } from './components/SheetView'
 import { CreateView, type CreateChoice } from './views/CreateView'
 import { SettingsView } from './views/SettingsView'
 import { TodayView } from './views/TodayView'
@@ -39,6 +43,10 @@ export default function App() {
   const [folderAction, setFolderAction] = useState<FolderAction | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [lastBackup, setLastBackup] = useState<string | null>(store.loadLastBackup)
+  const [settings, setSettings] = useState<AppSettings>(loadSettings)
+  /** Vignette con la versione da colorare già pronta (chiavi "A01_bambina") */
+  const [coloringKeys, setColoringKeys] = useState<ReadonlySet<string>>(() => new Set())
+  const [coloringProgress, setColoringProgress] = useState<{ done: number; total: number } | null>(null)
   /** Vignette generate con AI (unite al catalogo) */
   const [aiScenes, setAiList] = useState<Scene[]>([])
   const [aiOpen, setAiOpen] = useState(false)
@@ -59,6 +67,9 @@ export default function App() {
   useEffect(() => {
     if (!store.saveDraft(draft)) setToast(STORAGE_FULL)
   }, [draft])
+  useEffect(() => {
+    if (!saveSettings(settings)) setToast('Spazio del browser esaurito: il logo è troppo grande per essere salvato.')
+  }, [settings])
   useEffect(() => {
     if (!toast) return
     const t = setTimeout(() => setToast(null), 3000)
@@ -150,17 +161,26 @@ export default function App() {
 
   /** Crea: nuova scheda in una cartella (anche nuova) o come bozza, poi apre l'editor. */
   function createNewSheet(template: TemplateId, choice: CreateChoice) {
+    placeNewSheet(choice, (childName) => ({ ...createSheet(template, childName), uppercase: settings.uppercaseDefault }))
+  }
+
+  /** Crea da una scheda pronta: tutto già compilato e modificabile. */
+  function createFromPreset(preset: Preset, character: Character, choice: CreateChoice) {
+    placeNewSheet(choice, (childName) => sheetFromPreset(preset, character, childName, settings.uppercaseDefault))
+  }
+
+  function placeNewSheet(choice: CreateChoice, make: (childName: string) => Sheet) {
     const now = Date.now()
     if ('draft' in choice) {
       const draftHasWork = draft.cells.some((c) => c.code) || draft.notes.trim() !== ''
       if (draftHasWork && !confirm('C’è una bozza non salvata: verrà sostituita da quella nuova. Continuare?')) return
-      setDraft({ ...createSheet(template), openedAt: now })
+      setDraft({ ...make(''), openedAt: now })
       navigate({ name: 'scheda', id: null }, { replace: true })
       return
     }
     const { data: d, folderId } = resolveFolder(data, choice)
     const folder = d.folders.find((f) => f.id === folderId)!
-    const created = { ...createSheet(template, folder.name), folderId, openedAt: now }
+    const created = { ...make(folder.name), folderId, openedAt: now }
     setData(store.upsertSheet(d, created))
     navigate({ name: 'scheda', id: created.id }, { replace: true })
   }
@@ -180,7 +200,7 @@ export default function App() {
   }
 
   function exportBackup() {
-    const json = JSON.stringify(store.makeBackup(data), null, 2)
+    const json = JSON.stringify(store.makeBackup(data, settings), null, 2)
     downloadBlob(new Blob([json], { type: 'application/json' }), `emovere-backup_${todayISO()}.json`)
     const now = new Date().toISOString()
     store.saveLastBackup(now)
@@ -190,15 +210,17 @@ export default function App() {
 
   async function importBackup(file: File) {
     try {
-      const { data: incoming, exportedAt } = store.parseBackup(await file.text())
+      const { data: incoming, exportedAt, settings: incomingSettings } = store.parseBackup(await file.text())
       const when = exportedAt ? ` del ${new Date(exportedAt).toLocaleString('it-IT')}` : ''
+      const extra = incomingSettings ? ' Sostituirà anche logo, nome del centro e impostazioni.' : ''
       const ok = confirm(
         `Il backup${when} contiene ${incoming.folders.length} cartelle e ${incoming.sheets.length} schede.\n\n` +
-          `Sostituirà TUTTE le cartelle e le schede attuali (${data.folders.length} cartelle, ${data.sheets.length} schede). ` +
+          `Sostituirà TUTTE le cartelle e le schede attuali (${data.folders.length} cartelle, ${data.sheets.length} schede).${extra} ` +
           'Non si può annullare. Continuare?',
       )
       if (!ok) return
       setData(incoming)
+      if (incomingSettings) setSettings(incomingSettings)
       setToast('Backup importato')
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Non è stato possibile leggere il backup.')
@@ -220,6 +242,22 @@ Non si può annullare.`)) return
     } catch (err) {
       alert((err as Error).message)
     }
+  }
+
+  /** Vignette visibili della scheda (personaggio attuale) senza versione da colorare. */
+  function missingColoring(target: Sheet): string[] {
+    const codes = new Set(
+      visibleIndexes(target)
+        .map((i) => target.cells[i].code)
+        .filter((c): c is string => !!c),
+    )
+    return [...codes].filter((code) => !coloringKeys.has(coloringKey(code, target.character)))
+  }
+
+  async function generateColoring(target: Sheet) {
+    void target
+    setColoringProgress(null)
+    setColoringKeys((k) => k)
   }
 
   const closePicker = useCallback(() => setPickTarget(null), [])
@@ -287,6 +325,7 @@ Non si può annullare.`)) return
             folderId={route.folderId}
             onBack={backTo({ name: 'oggi' })}
             onCreate={createNewSheet}
+            onCreatePreset={createFromPreset}
           />
         )
       case 'libreria':
@@ -316,6 +355,8 @@ Non si può annullare.`)) return
       case 'impostazioni':
         return (
           <SettingsView
+            settings={settings}
+            onSettings={(patch) => setSettings((s) => ({ ...s, ...patch }))}
             lastBackup={lastBackup}
             folders={data.folders.length}
             sheets={data.sheets.length}
@@ -335,6 +376,13 @@ Non si può annullare.`)) return
           <Editor
             sheet={editing}
             folder={editingFolder}
+            settings={settings}
+            coloringKeys={coloringKeys}
+            coloring={{
+              missing: missingColoring(editing).length,
+              progress: coloringProgress,
+              onGenerate: () => void generateColoring(editing),
+            }}
             onChange={updateEditing}
             onChooseScene={setPickTarget}
             onChooseSymbol={setSymbolIndex}

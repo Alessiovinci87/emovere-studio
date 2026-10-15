@@ -34,6 +34,8 @@ body {
     width: 100%;
     color: inherit;
     font: inherit;
+    /* Stampatello: i campi seguono la pagina (solo visualizzazione, il testo salvato non cambia) */
+    text-transform: inherit;
     resize: none;
   }
   .sheet-field:hover {
@@ -46,5 +48,7 @@ body {
   .sheet-field::placeholder {
     color: #c4bccb;
     font-weight: 400;
+    /* I suggerimenti restano in minuscolo anche con lo stampatello: si distinguono dal testo vero */
+    text-transform: none;
   }
 }

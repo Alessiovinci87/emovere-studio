@@ -25,6 +25,7 @@ export interface Catalog {
 }
 
 export type TemplateId =
+  | 'routine-4'
   | 'routine-6'
   | 'routine-9'
   | 'routine-12'
@@ -32,6 +33,8 @@ export type TemplateId =
   | 'scelte-2'
   | 'scelte-3'
   | 'scelte-4'
+  | 'prima-adesso-dopo'
+  | 'agenda'
 
 export type SymbolKind = 'check' | 'cross' | 'forbidden'
 export type Corner = 'tl' | 'tr' | 'bl' | 'br'
@@ -49,6 +52,17 @@ export interface Cell {
   text: string | null
   time: string
   symbol: CellSymbol | null
+}
+
+export type TimeMode = 'analog' | 'digital' | 'both'
+
+export interface AgendaOptions {
+  /** 7 = Lun–Dom, 5 = solo Lun–Ven */
+  days: 5 | 7
+  /** Momenti della giornata (righe), da 1 a 4 */
+  rows: number
+  /** Nomi delle righe (sempre 4, si usano le prime `rows`) */
+  labels: [string, string, string, string]
 }
 
 export type SheetStatus = 'da-fare' | 'in-lavorazione' | 'pronta' | 'consegnata'
@@ -76,6 +90,16 @@ export interface Sheet {
   doneCircle: boolean
   /** Con il cerchietto: aggiunge al PDF la pagina di stelline rotonde da ritagliare */
   cutouts: boolean
+  /** Testo in stampatello maiuscolo (solo visualizzazione: il testo salvato resta com'è) */
+  uppercase: boolean
+  /** Come si mostra l'orario dei riquadri */
+  timeMode: TimeMode
+  /** Piè di pagina con logo e nome del centro; null = automatico (sì se c'è un logo) */
+  showLogo: boolean | null
+  /** Versione da colorare: vignette a contorno, numeri e cornici in bianco e nero */
+  coloring: boolean
+  /** Solo Agenda della settimana */
+  agenda: AgendaOptions
   /** null = scheda non ancora salvata (bozza) */
   folderId: string | null
   status: SheetStatus

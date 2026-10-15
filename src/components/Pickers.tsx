@@ -14,6 +14,7 @@ export function FolderPicker({
   folders,
   initialFolderId,
   allowDraft,
+  extra,
   onConfirm,
   onClose,
 }: {
@@ -23,6 +24,8 @@ export function FolderPicker({
   initialFolderId?: string | null
   /** Aggiunge la scelta "Bozza": la scheda non va in nessuna cartella per ora */
   allowDraft?: boolean
+  /** Contenuto in più sopra la scelta della cartella (es. personaggio) */
+  extra?: React.ReactNode
   onConfirm: (choice: { folderId: string } | { newName: string } | { draft: true }) => void
   onClose: () => void
 }) {
@@ -42,6 +45,7 @@ export function FolderPicker({
           )
         }}
       >
+        {extra}
         <fieldset className="flex flex-col gap-2">
           <legend className="sr-only">Cartella</legend>
           {folders.map((f) => (

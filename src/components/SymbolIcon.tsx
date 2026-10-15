@@ -16,8 +16,23 @@ export const cornerOptions: { corner: Corner; label: string }[] = [
 const GREEN = '#3f9a4a'
 const RED = '#d6453d'
 
-/** Simbolo disegnato in SVG: bordo bianco per staccarsi da qualunque illustrazione. */
-export function SymbolIcon({ kind, className }: { kind: SymbolKind; className?: string }) {
+/**
+ * Simbolo disegnato in SVG: bordo bianco per staccarsi da qualunque illustrazione.
+ * `mono`: versione da colorare, solo contorno nero su bianco (risparmia inchiostro).
+ */
+export function SymbolIcon({ kind, className, mono }: { kind: SymbolKind; className?: string; mono?: boolean }) {
+  if (mono) {
+    return (
+      <svg viewBox="0 0 100 100" className={className} aria-hidden="true">
+        <circle cx="50" cy="50" r="42" fill="white" stroke="#222" strokeWidth="6" />
+        {kind === 'check' && (
+          <path d="M28 52 L44 67 L73 35" fill="none" stroke="#222" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
+        )}
+        {kind === 'cross' && <path d="M34 34 L66 66 M66 34 L34 66" fill="none" stroke="#222" strokeWidth="9" strokeLinecap="round" />}
+        {kind === 'forbidden' && <path d="M21 21 L79 79" stroke="#222" strokeWidth="9" />}
+      </svg>
+    )
+  }
   return (
     <svg viewBox="0 0 100 100" className={className} aria-hidden="true">
       {kind === 'check' && (

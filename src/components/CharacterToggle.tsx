@@ -15,6 +15,7 @@ export function CharacterToggle({ value, onChange }: Props) {
     <div role="radiogroup" aria-label="Personaggio" className="inline-flex rounded-full bg-sand p-1">
       {options.map((o) => (
         <button
+          type="button"
           key={o.value}
           role="radio"
           aria-checked={value === o.value}
