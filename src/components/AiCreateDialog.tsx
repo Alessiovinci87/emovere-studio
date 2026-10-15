@@ -50,7 +50,7 @@ export function AiCreateDialog({ onSaved, onClose }: Props) {
     setStep({ name: 'generating' })
     try {
       const preview = await aiApi.generate({ setting, outfit, expression, adult, description })
-      setStatus((s) => (s ? { ...s, used: preview.used, limit: preview.limit } : s))
+      setStatus((s) => (s ? { ...s, used: preview.used, limit: preview.limit, period: preview.period } : s))
       setTitleF(preview.title_f)
       setTitleM(preview.title_m)
       setTags(preview.tags.join(', '))
@@ -157,8 +157,8 @@ export function AiCreateDialog({ onSaved, onClose }: Props) {
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line/70 pt-5">
               <p className="text-sm text-muted">
                 {status
-                  ? `Oggi: ${status.used} di ${status.limit} immagini (ogni vignetta ne usa 2).`
-                  : 'Controllo il limite giornaliero…'}
+                  ? `${status.period === 'mese' ? 'Questo mese' : 'Oggi'}: ${status.used} di ${status.limit} immagini (ogni vignetta ne usa 2).`
+                  : 'Controllo il limite…'}
               </p>
               <div className="flex gap-2">
                 <Button onClick={onClose} disabled={busy}>
@@ -170,7 +170,9 @@ export function AiCreateDialog({ onSaved, onClose }: Props) {
               </div>
             </div>
             {remaining !== null && remaining < 2 && (
-              <p className="text-sm font-bold text-[#a2472f]">Limite di oggi raggiunto: si riparte domani.</p>
+              <p className="text-sm font-bold text-[#a2472f]">
+                {status?.period === 'mese' ? 'Limite del mese raggiunto: si riparte il primo del mese.' : 'Limite di oggi raggiunto: si riparte domani.'}
+              </p>
             )}
             {step.name === 'generating' && (
               <p className="flex items-center gap-3 rounded-2xl bg-accent-soft px-4 py-3 text-accent" role="status">

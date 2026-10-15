@@ -1,9 +1,10 @@
 // Chiamate dell'app alle funzioni /api delle vignette AI.
-import type { AiAdult, AiRequest } from '../config/ai'
+import type { AiAdult, AiLimitPeriod, AiRequest } from '../config/ai'
 import type { Scene } from '../types'
 
 export interface AiStatus {
   limit: number
+  period: AiLimitPeriod
   used: number
   /** Adulti con il foglio di riferimento caricato */
   adults: AiAdult[]
@@ -17,6 +18,7 @@ export interface AiPreview {
   images: { bambina: string; bambino: string }
   used: number
   limit: number
+  period: AiLimitPeriod
 }
 
 export interface AiSave {

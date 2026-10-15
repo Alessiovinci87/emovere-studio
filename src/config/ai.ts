@@ -17,8 +17,14 @@ export const AI_IMAGE = {
   compression: 90,
 } as const
 
-/** Immagini al giorno (ogni vignetta ne crea 2: bambina e bambino). Si cambia con AI_DAILY_LIMIT. */
-export const AI_DAILY_LIMIT_DEFAULT = 30
+/**
+ * Limite di immagini generate (ogni vignetta ne crea 2: bambina e bambino), per giorno o per mese.
+ * Si cambia senza toccare il codice con le variabili d'ambiente AI_LIMIT (numero) e AI_LIMIT_PERIOD (giorno | mese).
+ * Questi sono i valori usati se le variabili mancano.
+ */
+export const AI_LIMIT_DEFAULT = 30
+export type AiLimitPeriod = 'giorno' | 'mese'
+export const AI_LIMIT_PERIOD_DEFAULT: AiLimitPeriod = 'giorno'
 
 type Option = { label: string; prompt: string }
 

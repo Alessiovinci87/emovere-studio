@@ -5,6 +5,7 @@
 //   index.json                                             voci della libreria AI (si uniscono a catalog.json)
 //   usage.json                                             contatore delle immagini generate oggi
 import { del, get, put } from '@vercel/blob'
+import type { AiLimitPeriod } from '../../src/config/ai.js'
 import type { Scene } from '../../src/types.js'
 
 const INDEX = 'index.json'
@@ -17,8 +18,10 @@ export interface AiIndex {
 }
 
 interface Usage {
-  /** Giorno (ora italiana) AAAA-MM-GG */
-  date: string
+  /** Periodo del conteggio (ora italiana): AAAA-MM-GG per giorno, AAAA-MM per mese */
+  period?: string
+  /** Versioni precedenti: solo giorno */
+  date?: string
   count: number
 }
 
@@ -50,19 +53,23 @@ export async function writeIndex(index: AiIndex): Promise<void> {
   await writeJson(INDEX, index)
 }
 
-/** Data di oggi in Italia: il limite giornaliero si azzera a mezzanotte italiana. */
-export function todayInItaly(now = new Date()): string {
-  return now.toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' })
+/**
+ * Periodo corrente in Italia: "2026-10-15" (giorno) o "2026-10" (mese).
+ * Il limite si azzera a mezzanotte italiana o il primo del mese.
+ */
+export function currentPeriod(period: AiLimitPeriod, now = new Date()): string {
+  const day = now.toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' })
+  return period === 'mese' ? day.slice(0, 7) : day
 }
 
-export async function usedToday(): Promise<number> {
+export async function usedInPeriod(period: AiLimitPeriod): Promise<number> {
   const usage = await readJson<Usage>(USAGE)
-  return usage && usage.date === todayInItaly() ? usage.count : 0
+  return usage && (usage.period ?? usage.date) === currentPeriod(period) ? usage.count : 0
 }
 
-export async function addUsage(images: number): Promise<void> {
-  const count = (await usedToday()) + images
-  await writeJson(USAGE, { date: todayInItaly(), count } satisfies Usage)
+export async function addUsage(period: AiLimitPeriod, images: number): Promise<void> {
+  const count = (await usedInPeriod(period)) + images
+  await writeJson(USAGE, { period: currentPeriod(period), count } satisfies Usage)
 }
 
 export function imagePath(code: string, character: 'bambina' | 'bambino'): string {

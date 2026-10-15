@@ -56,16 +56,24 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
   - Il prompt dell'immagine lo compone solo il server con il template fisso (`buildImagePrompt` in `src/config/ai.ts`); il testo dell'utente non entra mai nel prompt dell'immagine. Rispetto al template base ci sono due righe in più: espressione e, se scelto, adulto
   - Testi fissi di ambienti, abbigliamenti e adulti presi dalla "Libreria prompt scene – Emovere", in `src/config/ai.ts` (lo stesso file definisce modelli, qualità, formato, limite predefinito)
   - Modelli (verificati sulla documentazione OpenAI a ottobre 2026): immagini `gpt-image-2.5-sunburst`, testo `gpt-6-luna`. Si cambiano in `AI_MODELS`
-  - Limite giornaliero di immagini (default 30, ogni vignetta ne usa 2), azzerato a mezzanotte italiana; messaggio chiaro quando è raggiunto
+  - Limite di immagini per giorno o per mese (ogni vignetta ne usa 2), configurabile senza toccare il codice con `AI_LIMIT` e `AI_LIMIT_PERIOD`; si azzera a mezzanotte italiana o il primo del mese; messaggio chiaro quando è raggiunto. Prototipo: 100 al giorno. Senza variabili: 30 al giorno
   - `GET/POST/DELETE /api/library`: elenco, salvataggio, eliminazione. `GET /api/image?p=…`: serve le immagini dal Blob privato (stesso dominio: niente CORS per l'export PDF, dietro password)
-  - Blob privato: `bambina/X001_bambina.webp`, `bambino/X001_bambino.webp`, `index.json` (voci della libreria AI, unite a `catalog.json` dall'app con `setAiScenes`), `usage.json` (contatore del giorno)
+  - Blob privato (store `emovere-studio-ai`, regione fra1): `bambina/X001_bambina.webp`, `bambino/X001_bambino.webp`, `index.json` (voci della libreria AI, unite a `catalog.json` dall'app con `setAiScenes`), `usage.json` (contatore del periodo)
 - Fogli di riferimento in `public/library/refs/`: `bambina_ref.png`, `bambino_ref.png`; gli adulti si aggiungono come `mamma_ref.png`, `papa_ref.png`, `maestra_ref.png` (inclusi nella funzione con `includeFiles` in `vercel.json`)
 - In locale (`npm run dev`) le funzioni non girano: la finestra AI dice che funziona solo online. Collaudo delle funzioni: compilare con `tsc -p tsconfig.api.json --noEmit false --outDir .apitest --rootDir .` e simulare OpenAI/Blob (cartella `.apitest` ignorata da git)
 - Variabili d'ambiente su Vercel:
   - `OPENAI_API_KEY`: chiave OpenAI, **solo** su Vercel (mai nel codice, nel browser o in chat)
   - `BLOB_READ_WRITE_TOKEN`: creata da Vercel collegando uno store Blob al progetto (o OIDC con `BLOB_STORE_ID`)
-  - `AI_DAILY_LIMIT`: facoltativa, immagini al giorno (default 30)
+  - `AI_LIMIT`: immagini per periodo (prototipo: 100; senza variabile: 30)
+  - `AI_LIMIT_PERIOD`: `giorno` o `mese` (senza variabile: `giorno`)
+  - Le modifiche alle variabili valgono dal deploy successivo (Redeploy)
   - `APP_PASSWORD`: la password dell'app (vedi "Deploy")
+
+## Costi AI e versione in vendita (piano, non ancora fatto)
+- Costo: il listino OpenAI per `gpt-image-2.5` è a token (immagini in uscita $30/M, in ingresso $8/M) senza prezzo per immagine; stima 5-10 centesimi per immagine, 10-25 per vignetta (2 immagini + testo, che costa quasi nulla). Il costo reale si legge nella pagina Usage di OpenAI
+- Oggi il limite è unico per tutta l'app (un solo account, protetto da password)
+- Per la vendita servono prima login e account (fase successiva). Poi: piani con una quota di immagini al mese (es. Base / Pro), contatore per account invece che globale, quota mostrata nell'app, avviso all'80%, eventuale acquisto di pacchetti extra; il limite globale resta come tetto di sicurezza sulla spesa totale
+- Il codice è già predisposto: quantità e periodo stanno nelle variabili d'ambiente, il contatore è in `api/_lib/storage.ts` (`usedInPeriod`/`addUsage`) e basterà renderlo per account
 
 ## Funzioni del prototipo
 1. **Libreria**: griglia di vignette, ricerca testuale su titolo e tag (case-insensitive, senza accenti), filtri per blocco, ambiente e personaggio.
