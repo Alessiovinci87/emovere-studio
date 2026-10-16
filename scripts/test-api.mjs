@@ -1,7 +1,9 @@
-// Collaudo delle funzioni del login contro un PostgreSQL locale con stub_supabase.sql e le migrazioni.
-// Prima: tsc -p tsconfig.api.json --noEmit false --outDir .apitest --rootDir .
+// Collaudo delle funzioni /api (login, centro, membri, bambini, profilo, obiettivi, materiali)
+// contro un PostgreSQL locale. Le chiavi JWT le genera il test; le API di amministrazione di Supabase
+// (inviti, azzera MFA) non sono coperte.
+// Prima: database usa e getta con supabase/tests/stub_supabase.sql e le migrazioni, poi
+//   tsc -p tsconfig.api.json --noEmit false --outDir .apitest --rootDir .
 // Uso: TEST_DATABASE_URL=postgres://postgres@localhost:5432/emo_api node scripts/test-api.mjs
-// (database usa e getta con gli utenti ...0a e ...0b in auth.users; le chiavi JWT le genera il test)
 import http from 'node:http'
 import assert from 'node:assert/strict'
 import { generateKeyPair, exportJWK, SignJWT } from 'jose'
@@ -22,8 +24,9 @@ process.env.DATA_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64')
 
 const A = '00000000-0000-0000-0000-00000000000a'
 const B = '00000000-0000-0000-0000-00000000000b'
+const C = '00000000-0000-0000-0000-00000000000c'
 async function token(sub, aal = 'aal2', issuer = `${base}/auth/v1`) {
-  return new SignJWT({ email: sub === A ? 'a@test' : 'b@test', aal, role: 'authenticated' })
+  return new SignJWT({ email: `${sub.slice(-1)}@test`, aal, role: 'authenticated' })
     .setProtectedHeader({ alg: 'ES256', kid: 'k1' })
     .setSubject(sub)
     .setIssuer(issuer)
@@ -44,11 +47,17 @@ async function call(mod, method, path, tok, body, h) {
   return { status: r.status, body: await r.json() }
 }
 
+const postgres = (await import('postgres')).default
+const sql = postgres(process.env.DATABASE_URL, { onnotice: () => {} })
+await sql`insert into auth.users (id, email) values (${A}, 'a@test'), (${B}, 'b@test'), (${C}, 'c@test') on conflict do nothing`
+
 const me = await import('../.apitest/api/me.js')
 const setup = await import('../.apitest/api/setup.js')
 const org = await import('../.apitest/api/organization.js')
 const members = await import('../.apitest/api/members.js')
 const session = await import('../.apitest/api/_lib/session.js')
+const children = await import('../.apitest/api/children.js')
+const materials = await import('../.apitest/api/materials.js')
 const crypto = await import('../.apitest/api/_lib/crypto.js')
 
 // Sessione e token
@@ -100,16 +109,18 @@ assert.equal(r.body.organization, null)
 assert.equal(r.body.setupAvailable, false)
 
 // Chiave dati del centro: cifrata con DATA_ENCRYPTION_KEY, si decifra
-const postgres = (await import('postgres')).default
-const sql = postgres(process.env.DATABASE_URL)
 const [{ dek_wrapped, id: orgId }] = await sql`select dek_wrapped, id from app.organizations`
 const dek = crypto.unwrapDek(dek_wrapped)
 assert.equal(dek.length, 32)
 const enc = crypto.encryptField(dek, 'Difficoltà nelle transizioni', 'child_profile_entries.text_enc:123')
-assert.match(enc, /^ev1:[0-9]{1,5}:[A-Za-z0-9+/]{16}:[A-Za-z0-9+/]{24,}={0,2}$/, 'formato accettato dal dominio')
+assert.match(enc, /^ev1:[0-9]{1,5}:[A-Za-z0-9+/]{16}:[A-Za-z0-9+/]{22,}={0,2}$/, 'formato accettato dal dominio')
 assert.equal(crypto.decryptField(dek, enc, 'child_profile_entries.text_enc:123'), 'Difficoltà nelle transizioni')
 assert.throws(() => crypto.decryptField(dek, enc, 'child_profile_entries.text_enc:456'), 'contesto diverso: non si decifra')
 await sql`select ${enc}::app.encrypted_text`
+// Ogni lunghezza di testo produce un valore accettato dal database (anche 1 carattere)
+for (let n = 1; n <= 40; n++) {
+  await sql`select ${crypto.encryptField(dek, 'x'.repeat(n), 'prova')}::app.encrypted_text`
+}
 
 // Membri e privacy: B operatore
 await sql`insert into app.memberships (org_id, user_id, role, email) values (${orgId}, ${B}, 'operatore', 'b@test')`
@@ -144,6 +155,219 @@ assert.deepEqual(
   log.map((a) => `${a.action}:${a.entity}`),
   ['crea:organizations', 'modifica:memberships', 'modifica:organizations', 'modifica:organizations', 'elimina:memberships'],
 )
+
+// ——— Bambini, profilo, obiettivi ———
+await sql`insert into app.memberships (org_id, user_id, role, email) values (${orgId}, ${B}, 'operatore', 'b@test')`
+// Centro di C (creato come amministratore: dall'app si crea solo il primo)
+const [{ id: org2 }] = await sql`insert into app.organizations (name, dek_wrapped) values ('Altro', ${crypto.newWrappedDek()}) returning id`
+await sql`insert into app.memberships (org_id, user_id, role, email) values (${org2}, ${C}, 'titolare', 'c@test')`
+const tc = await token(C)
+
+r = await call(children, 'POST', '/api/children', ta, { pseudonym: '' })
+assert.equal(r.status, 400)
+r = await call(children, 'POST', '/api/children', tb, { pseudonym: 'Stella', realName: 'Sofia Rossi' })
+assert.equal(r.status, 403, 'operatore non inserisce il nome reale')
+r = await call(children, 'POST', '/api/children', ta, {
+  pseudonym: 'Stella',
+  birthYear: 2020,
+  developmentLevel: 'Comprensione di frasi semplici',
+  materialName: 'Sofia',
+  realName: 'Sofia Rossi',
+})
+assert.equal(r.status, 200, JSON.stringify(r.body))
+const child = r.body.child
+assert.equal(child.code, 'B-0001')
+assert.equal(child.realName, 'Sofia Rossi')
+assert.equal(child.materialName, 'Sofia')
+// Nel database solo testo cifrato
+const [raw] = await sql`
+  select c.development_level_enc, c.material_name_enc, i.real_name_enc
+  from app.children c join app.child_identity i on i.child_id = c.id`
+for (const v of Object.values(raw)) {
+  assert.match(v, /^ev1:/)
+  assert.ok(!v.includes('Sofia') && !v.includes('Comprensione'))
+}
+r = await call(children, 'POST', '/api/children', ta, { pseudonym: 'Luna', legacyId: 'cartella-1' })
+const child2 = r.body.child
+r = await call(children, 'POST', '/api/children', ta, { pseudonym: 'Luna bis', legacyId: 'cartella-1' })
+assert.equal(r.body.existing, true, 'importazione senza doppioni')
+assert.equal(r.body.child.id, child2.id)
+// Valore cifrato copiato su un'altra riga: non si decifra (contesto diverso)
+await sql`update app.children set material_name_enc = ${raw.material_name_enc} where id = ${child2.id}`
+const consoleError = console.error
+console.error = () => {}
+r = await call(children, 'GET', `/api/children?id=${child2.id}`, ta)
+console.error = consoleError
+assert.equal(r.status, 500, 'valore spostato: non si decifra')
+await sql`update app.children set material_name_enc = null where id = ${child2.id}`
+
+r = await call(children, 'GET', `/api/children?id=${child.id}`, tb)
+assert.equal(r.status, 200)
+assert.equal(r.body.child.realName, undefined, 'operatore non vede il nome reale')
+assert.equal(r.body.child.developmentLevel, 'Comprensione di frasi semplici')
+r = await call(children, 'GET', `/api/children?id=${child.id}`, tc)
+assert.equal(r.status, 404, 'altro centro: non esiste')
+r = await call(children, 'GET', '/api/children', tc)
+assert.equal(r.body.children.length, 0)
+r = await call(children, 'PATCH', '/api/children', tc, { id: child.id, pseudonym: 'Rubato' })
+assert.equal(r.status, 404)
+r = await call(children, 'PATCH', '/api/children', tb, { id: child.id, realName: 'X' })
+assert.equal(r.status, 403)
+r = await call(children, 'PATCH', '/api/children', ta, { id: child.id, realName: null, materialName: 'Sofi' })
+assert.equal(r.body.child.realName, null)
+assert.equal(r.body.child.materialName, 'Sofi')
+
+// Profilo
+r = await call(children, 'POST', '/api/children?resource=profile', tb, {
+  childId: child.id,
+  section: 'interessi',
+  text: 'Dinosauri',
+  source: 'genitori',
+})
+assert.equal(r.status, 200, JSON.stringify(r.body))
+const entry = r.body.entry
+assert.equal(entry.text, 'Dinosauri')
+r = await call(children, 'POST', '/api/children?resource=profile', tb, { childId: child.id, section: 'diagnosi', text: 'x', source: 'osservato' })
+assert.equal(r.status, 400)
+r = await call(children, 'POST', '/api/children?resource=profile', tc, { childId: child.id, section: 'interessi', text: 'x', source: 'osservato' })
+assert.equal(r.status, 404, 'C non scrive nel profilo di un bambino del centro 1')
+r = await call(children, 'PATCH', '/api/children?resource=profile', tb, { id: entry.id, text: 'Dinosauri e treni', archived: true })
+assert.equal(r.body.entry.text, 'Dinosauri e treni')
+assert.ok(r.body.entry.archivedAt)
+
+// Obiettivi con storico
+r = await call(children, 'POST', '/api/children?resource=goals', tb, { childId: child.id, title: 'Aspettare il turno', area: 'abilita_sociali' })
+const goal = r.body.goal
+assert.equal(goal.status, 'attivo')
+r = await call(children, 'PATCH', '/api/children?resource=goals', tb, { id: goal.id, status: 'raggiunto', note: 'Tre settimane di fila' })
+assert.equal(r.body.goal.status, 'raggiunto')
+assert.ok(r.body.goal.closedOn)
+r = await call(children, 'GET', `/api/children?id=${child.id}`, ta)
+assert.equal(r.body.profile.length, 1)
+assert.deepEqual(r.body.goals[0].events.map((e) => e.kind), ['creato', 'stato'])
+assert.equal(r.body.goals[0].events[1].note, 'Tre settimane di fila')
+r = await call(children, 'DELETE', `/api/children?resource=goals&id=${goal.id}`, tb)
+assert.equal(r.status, 403, 'operatore non elimina obiettivi')
+
+// ——— Materiali ———
+const sheet = {
+  id: 'loc-1',
+  folderId: 'f1',
+  template: 'routine-6',
+  title: 'La mattina di Sofi',
+  childName: 'Sofi',
+  notes: 'appunto',
+  cells: [],
+  status: 'pronta',
+}
+r = await call(materials, 'POST', '/api/materials', tb, {
+  childId: child.id,
+  title: 'La mia mattina',
+  content: sheet,
+  notes: 'Da plastificare',
+  reminder: { date: '2026-10-20', kind: 'stampare' },
+})
+assert.equal(r.status, 200, JSON.stringify(r.body))
+const mat = r.body.material
+assert.equal(mat.content.childName, undefined, 'nome del bambino tolto dal contenuto')
+assert.equal(mat.content.notes, undefined)
+assert.equal(mat.content.id, undefined)
+assert.equal(mat.content.template, 'routine-6')
+assert.equal(mat.notes, 'Da plastificare')
+assert.equal(mat.revision, 1)
+assert.deepEqual(mat.reminder, { date: '2026-10-20', kind: 'stampare', done: false })
+const [rawMat] = await sql`select notes_enc from app.materials where id = ${mat.id}`
+assert.match(rawMat.notes_enc, /^ev1:/)
+
+// Revisione: due dispositivi partono dalla revisione 1
+r = await call(materials, 'PATCH', '/api/materials', tb, { id: mat.id, title: 'Mattina' })
+assert.equal(r.status, 400, 'senza revisione')
+r = await call(materials, 'PATCH', '/api/materials', tb, { id: mat.id, baseRevision: 1, content: { ...sheet, cells: [{ id: 'c1' }] } })
+assert.equal(r.status, 200)
+assert.equal(r.body.material.revision, 2)
+r = await call(materials, 'PATCH', '/api/materials', ta, { id: mat.id, baseRevision: 1, title: 'Altro titolo' })
+assert.equal(r.status, 409, 'conflitto')
+assert.equal(r.body.conflict, true)
+assert.equal(r.body.current.revision, 2)
+assert.equal(r.body.current.content.cells.length, 1)
+r = await call(materials, 'PATCH', '/api/materials', ta, { id: mat.id, status: 'in-lavorazione', opened: true })
+assert.equal(r.status, 200, 'stato e apertura non richiedono la revisione')
+assert.equal(r.body.material.revision, 2)
+assert.ok(r.body.material.openedAt)
+
+// "Pronta" crea una versione fissa; export ne aggiunge un'altra
+r = await call(materials, 'PATCH', '/api/materials', tb, { id: mat.id, status: 'pronta' })
+assert.equal(r.body.material.currentVersion, 1)
+r = await call(materials, 'POST', '/api/materials?action=version', tb, { id: mat.id, reason: 'export' })
+assert.equal(r.body.versionNo, 2)
+r = await call(materials, 'GET', `/api/materials?id=${mat.id}`, tb)
+assert.deepEqual(r.body.versions.map((v) => v.reason), ['export', 'pronta'])
+r = await call(materials, 'GET', `/api/materials?id=${mat.id}&version=1`, tb)
+assert.equal(r.body.version.content.cells.length, 1)
+
+// Obiettivi collegati; spostando la scheda i collegamenti si tolgono
+r = await call(children, 'POST', '/api/children?resource=goals', ta, { childId: child.id, title: 'Vestirsi da solo' })
+const goal2 = r.body.goal
+r = await call(children, 'POST', '/api/children?resource=goals', ta, { childId: child2.id, title: 'Obiettivo di Luna' })
+const goalLuna = r.body.goal
+r = await call(materials, 'PATCH', '/api/materials', tb, { id: mat.id, goalIds: [goal2.id] })
+assert.deepEqual(r.body.material.goalIds, [goal2.id])
+r = await call(materials, 'PATCH', '/api/materials', tb, { id: mat.id, goalIds: [goalLuna.id] })
+assert.equal(r.status, 404, 'obiettivo di un altro bambino')
+r = await call(materials, 'GET', `/api/materials?id=${mat.id}`, tb)
+assert.deepEqual(r.body.material.goalIds, [goal2.id], 'la richiesta fallita non cambia niente')
+r = await call(materials, 'PATCH', '/api/materials', tb, { id: mat.id, childId: child2.id })
+assert.equal(r.body.material.childId, child2.id)
+assert.deepEqual(r.body.material.goalIds, [])
+
+// Duplica (riparte da Da fare, appunti cifrati di nuovo), generici, liste
+r = await call(materials, 'POST', '/api/materials?action=duplicate', tb, { id: mat.id })
+const copy = r.body.material
+assert.equal(copy.title, 'La mia mattina (copia)')
+assert.equal(copy.status, 'da-fare')
+assert.equal(copy.reminder, null)
+assert.equal(copy.notes, 'Da plastificare')
+r = await call(materials, 'POST', '/api/materials', ta, { title: 'Bozza', content: { template: 'routine-4' } })
+const draft = r.body.material
+assert.equal(draft.isGeneric, true)
+assert.equal(draft.childId, null)
+r = await call(materials, 'GET', '/api/materials?generic=1', tb)
+assert.deepEqual(r.body.materials.map((m) => m.id), [draft.id])
+assert.equal(r.body.materials[0].notes, undefined, 'appunti solo nel dettaglio')
+r = await call(materials, 'GET', `/api/materials?child=${child2.id}`, tb)
+assert.equal(r.body.materials.length, 2)
+r = await call(materials, 'GET', '/api/materials', tc)
+assert.equal(r.body.materials.length, 0, 'altro centro')
+r = await call(materials, 'POST', '/api/materials', tc, { childId: child.id, title: 'x', content: {} })
+assert.equal(r.status, 404, 'C non crea materiali per bambini del centro 1')
+r = await call(children, 'GET', '/api/children', ta)
+assert.deepEqual(r.body.children.find((c) => c.id === child2.id).counts, { 'da-fare': 1, pronta: 1 })
+
+// Cestino: l'operatore sposta, solo il titolare elimina per sempre
+r = await call(materials, 'DELETE', `/api/materials?id=${copy.id}`, tb)
+assert.equal(r.status, 403)
+r = await call(materials, 'PATCH', '/api/materials', tb, { id: copy.id, trashed: true })
+assert.ok(r.body.material.deletedAt)
+r = await call(materials, 'GET', '/api/materials?trash=1', tb)
+assert.deepEqual(r.body.materials.map((m) => m.id), [copy.id])
+r = await call(materials, 'DELETE', `/api/materials?id=${copy.id}`, ta)
+assert.equal(r.status, 200)
+r = await call(children, 'PATCH', '/api/children', tb, { id: child2.id, trashed: true })
+assert.ok(r.body.child.deletedAt)
+r = await call(materials, 'GET', '/api/materials', tb)
+assert.deepEqual(r.body.materials.map((m) => m.id), [draft.id], 'materiali di un bambino nel cestino nascosti')
+r = await call(children, 'DELETE', `/api/children?id=${child2.id}`, tb)
+assert.equal(r.status, 403)
+r = await call(children, 'DELETE', `/api/children?id=${child2.id}`, ta)
+assert.equal(r.status, 200)
+const [{ n }] = await sql`select count(*)::int as n from app.materials where child_id = ${child2.id}`
+assert.equal(n, 0, 'eliminando il bambino spariscono i suoi materiali')
+
+// Registro: letture e modifiche, mai contenuti
+const entries = await sql`select action, entity, details from app.audit_log where child_id = ${child.id} order by id`
+assert.ok(entries.some((a) => a.action === 'legge' && a.entity === 'children'))
+assert.ok(!JSON.stringify(entries).includes('Dinosauri') && !JSON.stringify(entries).includes('Sofi'))
+
 console.log('API: tutti i test superati')
 await sql.end()
 server.close()

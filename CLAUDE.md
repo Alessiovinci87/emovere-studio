@@ -20,7 +20,7 @@ Strumento per comporre schede visive (routine, storie sociali, prima/poi, scelte
   1. Supabase Pro (backup giornalieri, protezione dalle password già rubate) e Vercel Pro (uso commerciale)
   2. DPA firmati (Supabase, OpenAI e l'eventuale fornitore dei testi)
   3. Parere del consulente privacy (informativa e consenso dei genitori, registro dei trattamenti, DPIA)
-  4. Reset della password del database Supabase (quella iniziale era stata condivisa in chat) e nuovo supabase link: fatto il 16 ottobre 2026. A ogni nuovo reset aggiornare anche `DATABASE_URL` su Vercel e ripetere il link
+  4. Reset della password del database Supabase (quella attuale è stata condivisa in chat): **ancora da fare**. Dopo il reset aggiornare `DATABASE_URL` su Vercel (e Redeploy) e rifare `npx supabase link --project-ref vrlryycceswltabasogi`
   5. Il titolare attiva "Privacy verificata" (`organizations.privacy_verified_at`, solo ruolo `titolare`)
 - Finché "Privacy verificata" non è attiva, la schermata Bambini mostra l'avviso "Solo dati di prova" (`TestDataWarning` in `src/components/ui.tsx`). Prima del login l'avviso è sempre visibile
 
@@ -35,6 +35,21 @@ Strumento per comporre schede visive (routine, storie sociali, prima/poi, scelte
 - Server: `api/_lib/auth.ts` (`requireUser`, `adminAuth` con `SUPABASE_SECRET_KEY`), `api/_lib/db.ts` (`asUser`: transazione con `emovere_app` e `app.user_id`), `api/_lib/crypto.ts` (chiave doppia AES-256-GCM, contesto come AAD)
 - Variabili su Vercel: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (pubbliche); `SUPABASE_SECRET_KEY`, `DATABASE_URL` (pooler, porta 6543), `DATA_ENCRYPTION_KEY` (32 byte base64, anche nel password manager: senza, i dati cifrati sono persi) come Sensitive. In locale `.env.local` contiene solo le due `VITE_`
 - Collaudo delle funzioni: compilare in `.apitest` (vedi "Vignette con AI") e lanciare `node scripts/test-api.mjs` contro un PostgreSQL locale con stub e migrazioni (`TEST_DATABASE_URL`; istruzioni in testa al file; chiavi JWT generate dal test). Inviti e azzeramento MFA (API di amministrazione di Supabase) si provano solo online
+
+## Dati dei bambini sul server (Fase 0, punti 3-4)
+- `/api/children` (bambini, nome reale, profilo con `?resource=profile`, obiettivi con `?resource=goals`) e `/api/materials` (materiali, versioni, duplica, collegamento agli obiettivi): descrizione delle richieste in testa a ciascun file
+- Cifratura dei campi: `api/_lib/keys.ts` (`sealerFor`: chiave del centro letta sotto RLS; contesto `{tabella}.{colonna}:{id}`), id delle righe generati dal server prima di cifrare
+- Il contenuto di un materiale è lo `Sheet` senza `id`, `folderId`, `childName`, `notes`, `status`, `reminder` e date (colonne proprie); il nome sul PDF viene da `children.material_name_enc`
+- Controllo di revisione: `materials.revision` cresce solo cambiando titolo o contenuto (trigger). Per modificarli serve `baseRevision`; se non coincide, 409 `{ conflict: true, current }`. Stato, promemoria, apertura, cestino non lo richiedono
+- "Pronta" crea da sola una versione fissa; l'export ne chiede un'altra (`?action=version`, `reason: 'export'`)
+- Eliminazioni: gli operatori usano il cestino (`trashed`); eliminazione definitiva di bambini, obiettivi e materiali solo del titolare
+- `legacyId` in creazione rende l'importazione ripetibile senza doppioni (punto 5)
+- Registro: letture del dettaglio di un bambino o di un suo materiale e tutte le modifiche finiscono in `audit_log` (solo id e nomi dei campi)
+- Funzioni Vercel: oggi 10 file in `api/`. Il piano Hobby ha un limite al numero di funzioni per deploy: raggruppare per risorsa (`?resource=`, `?action=`) invece di creare un file per operazione
+- Decisioni per il punto 4 (collegamento dell'app):
+  - Offline: le modifiche restano in attesa nel browser e si salvano al ritorno della rete, con l'avviso "Non salvato, riprovo…"
+  - Mai "vince l'ultimo": se il server risponde 409 l'app mostra un avviso e lascia scegliere tra la versione del server, la propria, o salvare la propria come copia
+  - La bozza diventa un materiale generico sul server (`child_id` null), così si ritrova su tutti i dispositivi
 
 ## Database (Supabase)
 - Migrazioni in `supabase/migrations/` (versionate), configurazione CLI in `supabase/config.toml`. Si applicano con `npx supabase db push` dopo `npx supabase link --project-ref vrlryycceswltabasogi`. Pooler (per `DATABASE_URL`): `aws-0-eu-west-1.pooler.supabase.com`, utente `postgres.vrlryycceswltabasogi`; la password del database non va mai in chat né nel codice

@@ -27,6 +27,10 @@ export async function asUser<T>(userId: string, run: (tx: Tx) => Promise<T>): Pr
     const code = (err as { code?: string }).code
     if (code === 'P0001' || code === 'P0002') throw new UserError((err as Error).message, 409)
     if (code === '42501') throw new UserError('Non hai i permessi per questa operazione.', 403)
+    // Chiave esterna: collegamento a qualcosa di un altro centro o di un altro bambino, o già eliminato
+    if (code === '23503') throw new UserError('Elemento collegato non trovato.', 404)
+    if (code === '23505') throw new UserError('Esiste già.', 409)
+    if (code === '23514') throw new UserError('Dati non validi.', 400)
     throw err
   }
 }

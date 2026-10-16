@@ -158,6 +158,14 @@ insert into app.material_versions (org_id, material_id, title, content, reason)
 select pg_temp.ok((select array_agg(version_no order by version_no) = '{1,2}' from app.material_versions), 'versioni 1 e 2');
 select pg_temp.ok((select current_version = 2 from app.materials where id = current_setting('t.mat1')::uuid), 'current_version = 2');
 select pg_temp.expect_error($q$update app.material_versions set title = 'x'$q$, '42501');
+
+-- Revisione: cresce solo cambiando titolo o contenuto
+select pg_temp.ok((select revision = 1 from app.materials where id = current_setting('t.mat1')::uuid), 'revisione iniziale 1');
+update app.materials set status = 'pronta', opened_at = now() where id = current_setting('t.mat1')::uuid;
+select pg_temp.ok((select revision = 1 from app.materials where id = current_setting('t.mat1')::uuid), 'lo stato non cambia la revisione');
+update app.materials set content = '{"cells":[]}' where id = current_setting('t.mat1')::uuid;
+update app.materials set title = 'Nuovo titolo', revision = 99 where id = current_setting('t.mat1')::uuid;
+select pg_temp.ok((select revision = 3 from app.materials where id = current_setting('t.mat1')::uuid), 'contenuto e titolo: revisione 3 (non si imposta a mano)');
 select pg_temp.expect_error($q$delete from app.material_versions$q$, '42501');
 
 with x as (insert into app.goals (org_id, child_id, title_enc) values (current_setting('t.org1')::uuid, current_setting('t.child1')::uuid, :enc) returning id) select set_config('t.goal1', id::text, false) from x;
