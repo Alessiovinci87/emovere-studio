@@ -3,7 +3,9 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "regions": ["dub1"],
+  "regions": [
+    "dub1"
+  ],
   "rewrites": [
     {
       "source": "/((?!api/).*)",
@@ -17,6 +19,9 @@
     },
     "api/coloring.ts": {
       "maxDuration": 300
+    },
+    "api/guide.ts": {
+      "maxDuration": 120
     }
   }
 }

@@ -33,7 +33,16 @@ export interface Member {
   mfa?: boolean
 }
 
-async function call<T>(url: string, init: RequestInit = {}): Promise<T> {
+/** Risposta di /api: `network` = server irraggiungibile (offline), `status` 0 in quel caso. */
+export interface ApiResult {
+  ok: boolean
+  status: number
+  body: Record<string, unknown>
+  network?: boolean
+}
+
+/** Chiamata a /api con il token della sessione; non lancia errori: decide chi chiama. */
+export async function apiRequest(url: string, init: RequestInit = {}): Promise<ApiResult> {
   const token = (await supabase?.auth.getSession())?.data.session?.access_token
   let response: Response
   try {
@@ -45,17 +54,21 @@ async function call<T>(url: string, init: RequestInit = {}): Promise<T> {
       },
     })
   } catch {
-    throw new Error('Connessione non riuscita. Controlla internet e riprova.')
+    return { ok: false, status: 0, network: true, body: { error: 'Connessione non riuscita. Controlla internet e riprova.' } }
   }
   if (!response.headers.get('content-type')?.includes('application/json')) {
-    throw new Error('Il server non risponde: le funzioni /api girano solo nella versione online.')
+    return { ok: false, status: response.status, body: { error: 'Il server non risponde: le funzioni /api girano solo nella versione online.' } }
   }
-  const body = await response.json()
-  if (!response.ok) throw new Error(body.error ?? 'Qualcosa non ha funzionato. Riprova.')
-  return body as T
+  return { ok: response.ok, status: response.status, body: (await response.json()) as Record<string, unknown> }
 }
 
-const send = (method: string, body?: unknown): RequestInit => ({
+export async function call<T>(url: string, init: RequestInit = {}): Promise<T> {
+  const result = await apiRequest(url, init)
+  if (!result.ok) throw new Error((result.body.error as string | undefined) ?? 'Qualcosa non ha funzionato. Riprova.')
+  return result.body as T
+}
+
+export const send = (method: string, body?: unknown): RequestInit => ({
   method,
   body: body === undefined ? undefined : JSON.stringify(body),
 })

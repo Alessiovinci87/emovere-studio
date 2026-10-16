@@ -25,6 +25,7 @@ import type { Character, Scene, Sheet, StoreData, TemplateId } from './types'
 import { visibleIndexes } from './components/SheetView'
 import { CreateView, type CreateChoice } from './views/CreateView'
 import { SettingsView } from './views/SettingsView'
+import { GuideScreen } from './views/GuideEditor'
 import { TodayView } from './views/TodayView'
 
 type FolderAction = { mode: 'save' } | { mode: 'duplicate'; sheetId: string } | { mode: 'move'; sheetId: string }
@@ -365,6 +366,8 @@ Non si può annullare.`)) return
             onBack={backTo({ name: 'oggi' })}
             onCreate={createNewSheet}
             onCreatePreset={createFromPreset}
+            guidesOnline={!!session.account?.organization}
+            onOpenGuide={(id) => navigate({ name: 'guida', id })}
           />
         )
       case 'libreria':
@@ -414,7 +417,15 @@ Non si può annullare.`)) return
 
   return (
     <>
-      {route.name === 'scheda' ? (
+      {route.name === 'guida' ? (
+        <GuideScreen
+          id={route.id}
+          settings={settings}
+          names={[...data.folders.map((f) => f.name), ...data.sheets.map((s) => s.childName)].filter((n) => n.trim())}
+          onOpen={(id) => navigate({ name: 'guida', id }, { replace: true })}
+          onClose={() => back({ name: 'crea' })}
+        />
+      ) : route.name === 'scheda' ? (
         editing ? (
           <Editor
             sheet={editing}

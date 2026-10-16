@@ -119,3 +119,51 @@ export async function editImage(
   if (!b64) throw new UserError('Il servizio AI non ha restituito l’immagine. Riprova.', 502)
   return Uint8Array.from(Buffer.from(b64, 'base64'))
 }
+
+export interface TextUsage {
+  inputTokens: number | null
+  outputTokens: number | null
+}
+
+/**
+ * Modello di testo con risposta JSON a schema fisso (Responses API, structured outputs).
+ * Restituisce l'oggetto e i token usati (per il registro ai_requests).
+ */
+export async function structuredText<T>(options: {
+  model: string
+  instructions: string
+  input: string
+  name: string
+  schema: Record<string, unknown>
+  reasoning?: string
+}): Promise<{ value: T; usage: TextUsage }> {
+  const response = await fetch(`${API}/responses`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: options.model,
+      input: [
+        { role: 'system', content: options.instructions },
+        { role: 'user', content: options.input },
+      ],
+      ...(options.reasoning ? { reasoning: { effort: options.reasoning } } : {}),
+      // Niente conservazione della risposta lato OpenAI oltre il necessario
+      store: false,
+      text: { format: { type: 'json_schema', name: options.name, strict: true, schema: options.schema } },
+    }),
+  })
+  if (!response.ok) await openaiError(response)
+  const data = (await response.json()) as {
+    output?: { type: string; content?: { type: string; text?: string }[] }[]
+    usage?: { input_tokens?: number; output_tokens?: number }
+  }
+  const text = data.output
+    ?.filter((item) => item.type === 'message')
+    .flatMap((item) => item.content ?? [])
+    .find((part) => part.type === 'output_text')?.text
+  if (!text) throw new UserError('Il servizio AI non ha risposto correttamente. Riprova tra poco.', 502)
+  return {
+    value: JSON.parse(text) as T,
+    usage: { inputTokens: data.usage?.input_tokens ?? null, outputTokens: data.usage?.output_tokens ?? null },
+  }
+}

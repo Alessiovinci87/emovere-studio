@@ -2,13 +2,15 @@ import { useEffect, type ReactNode } from 'react'
 
 interface Props {
   title: string
-  onClose: () => void
+  /** Senza onClose la finestra non si chiude da sola: bisogna scegliere (es. conflitto di salvataggio) */
+  onClose?: () => void
   size?: 'sm' | 'lg'
   children: ReactNode
 }
 
 export function Modal({ title, onClose, size = 'lg', children }: Props) {
   useEffect(() => {
+    if (!onClose) return
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -30,13 +32,15 @@ export function Modal({ title, onClose, size = 'lg', children }: Props) {
       >
         <div className="flex items-center justify-between border-b border-line px-6 py-4">
           <h2 className="text-lg font-bold">{title}</h2>
-          <button
-            onClick={onClose}
-            className="rounded-full px-3 py-1 text-muted hover:bg-sand hover:text-ink"
-            aria-label="Chiudi"
-          >
-            ✕
-          </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="rounded-full px-3 py-1 text-muted hover:bg-sand hover:text-ink"
+              aria-label="Chiudi"
+            >
+              ✕
+            </button>
+          )}
         </div>
         <div className="overflow-y-auto p-6">{children}</div>
       </div>

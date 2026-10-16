@@ -33,7 +33,7 @@ export interface ExportContext {
   coloringKeys: ReadonlySet<string>
 }
 
-interface Preset {
+export interface Preset {
   dpi: number
   images: ImageVariant
   /** Qualità JPEG da provare in ordine; null = PNG senza perdita */
@@ -41,7 +41,7 @@ interface Preset {
   maxBytes?: number
 }
 
-const presets: Record<ExportKind, Preset> = {
+export const presets: Record<ExportKind, Preset> = {
   stampa: { dpi: 300, images: 'original', qualities: [null] },
   whatsapp: { dpi: 150, images: 'web', qualities: [0.85, 0.75, 0.6, 0.45], maxBytes: 2 * 1024 * 1024 },
 }
@@ -49,7 +49,7 @@ const presets: Record<ExportKind, Preset> = {
 const CSS_DPI = 96
 
 type Orientation = 'portrait' | 'landscape'
-interface Page {
+export interface Page {
   element: ReactNode
   orientation: Orientation
 }
@@ -80,18 +80,23 @@ function pagesFor(sheet: Sheet, preset: Preset, content: ExportContent, ctx: Exp
 
 /** Esporta in PDF A4 e avvia il download. */
 export async function exportPdf(sheet: Sheet, kind: ExportKind, content: ExportContent, ctx: ExportContext): Promise<void> {
-  const preset = presets[kind]
-  const pages = pagesFor(sheet, preset, content, ctx)
+  const pages = pagesFor(sheet, presets[kind], content, ctx)
   if (pages.length === 0) throw new Error('Non ci sono vignette da esportare.')
+  await exportPages(pages, kind, sheet.title || 'Scheda', fileName(sheet, kind, content))
+}
+
+/** Pagine già pronte → PDF A4 (una immagine per pagina) → download. Comune a schede e guide. */
+export async function exportPages(pages: Page[], kind: ExportKind, title: string, file: string): Promise<void> {
+  const preset = presets[kind]
   const canvases: HTMLCanvasElement[] = []
   for (const page of pages) canvases.push(await renderPage(page.element, preset))
 
   let pdf: Blob | undefined
   for (const quality of preset.qualities) {
-    pdf = buildPdf(sheet, pages, canvases, quality)
+    pdf = buildPdf(title, pages, canvases, quality)
     if (!preset.maxBytes || pdf.size <= preset.maxBytes) break
   }
-  downloadBlob(pdf!, fileName(sheet, kind, content))
+  downloadBlob(pdf!, file)
 }
 
 /** Disegna una pagina fuori schermo e la converte in un canvas alla risoluzione richiesta. */
@@ -123,9 +128,9 @@ function fontCSS(node: HTMLElement): Promise<string> {
   return fontCSSCache
 }
 
-function buildPdf(sheet: Sheet, pages: Page[], canvases: HTMLCanvasElement[], jpegQuality: number | null): Blob {
+function buildPdf(title: string, pages: Page[], canvases: HTMLCanvasElement[], jpegQuality: number | null): Blob {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: pages[0].orientation, compress: true })
-  doc.setProperties({ title: sheet.title || 'Scheda', creator: 'Emovere Studio' })
+  doc.setProperties({ title, creator: 'Emovere Studio' })
   pages.forEach((page, i) => {
     if (i > 0) doc.addPage('a4', page.orientation)
     const [w, h] = page.orientation === 'landscape' ? [297, 210] : [210, 297]
@@ -143,15 +148,21 @@ function buildPdf(sheet: Sheet, pages: Page[], canvases: HTMLCanvasElement[], jp
  * Solo stelline: "…_stelline.pdf". Carte: "…_carte.pdf". Da riordinare: "…_riordino.pdf".
  */
 export function fileName(sheet: Sheet, kind: ExportKind, content: ExportContent): string {
-  const title =
-    sheet.title
-      .normalize('NFD')
-      .replace(/[̀-ͯ]/g, '')
-      .replace(/[^a-zA-Z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'Scheda'
+  const title = fileTitle(sheet.title, 'Scheda')
   const suffix = kind === 'whatsapp' ? '_whatsapp' : ''
   if (content.type === 'stars') return `${title}_stelline${suffix}.pdf`
   if (content.type === 'cards') return `${title}_carte${suffix}.pdf`
   if (content.type === 'reorder') return `${title}_riordino${suffix}.pdf`
   return `${title}_${sheet.character}${suffix}.pdf`
+}
+
+/** Titolo per il nome del file: senza accenti, spazi → trattini */
+export function fileTitle(title: string, fallback: string): string {
+  return (
+    title
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || fallback
+  )
 }

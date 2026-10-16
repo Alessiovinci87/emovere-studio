@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Page, SectionHeader } from '../components/AppShell'
 import { CharacterToggle } from '../components/CharacterToggle'
+import { GuidesSection } from '../components/GuidesSection'
 import { FolderPicker } from '../components/Pickers'
 import { catalog, sceneThumb } from '../lib/catalog'
 import { availablePresets, genderize, type Preset } from '../lib/presets'
@@ -16,12 +17,15 @@ interface Props {
   onBack?: () => void
   onCreate: (template: TemplateId, choice: CreateChoice) => void
   onCreatePreset: (preset: Preset, character: Character, choice: CreateChoice) => void
+  /** Guide sul server: servono login e centro */
+  guidesOnline: boolean
+  onOpenGuide: (id: string) => void
 }
 
 type Chosen = { kind: 'template'; template: Template } | { kind: 'preset'; preset: Preset }
 
 /** Schede pronte e galleria dei modelli vuoti. Scelto, si sceglie la cartella (o bozza) e si apre l'editor. */
-export function CreateView({ folders, folderId, onBack, onCreate, onCreatePreset }: Props) {
+export function CreateView({ folders, folderId, onBack, onCreate, onCreatePreset, guidesOnline, onOpenGuide }: Props) {
   const [chosen, setChosen] = useState<Chosen | null>(null)
   const [character, setCharacter] = useState<Character>('bambina')
   const folder = folders.find((f) => f.id === folderId)
@@ -34,6 +38,8 @@ export function CreateView({ folders, folderId, onBack, onCreate, onCreatePreset
         subtitle={folder ? `Nuova scheda per ${folder.name}.` : 'Parti da una scheda pronta o da un modello vuoto.'}
         onBack={onBack}
       />
+
+      {!folder && <GuidesSection online={guidesOnline} onOpen={onOpenGuide} />}
 
       {presets.length > 0 && (
         <section className="mb-10 flex flex-col gap-4">

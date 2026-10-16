@@ -12,13 +12,15 @@ export type Route =
   | { name: 'impostazioni' }
   /** id null = bozza (scheda non ancora salvata) */
   | { name: 'scheda'; id: string | null }
+  /** Guida per genitori e scuola (sul server) */
+  | { name: 'guida'; id: string }
 
 /** Sezioni della navigazione principale */
 export type Section = 'oggi' | 'bambini' | 'crea' | 'libreria' | 'impostazioni'
 
 export function sectionOf(route: Route): Section | null {
   if (route.name === 'cartella') return 'bambini'
-  if (route.name === 'scheda') return null
+  if (route.name === 'scheda' || route.name === 'guida') return null
   return route.name
 }
 
@@ -32,6 +34,8 @@ export function toPath(route: Route): string {
       return route.folderId ? `/crea?cartella=${encodeURIComponent(route.folderId)}` : '/crea'
     case 'scheda':
       return `/scheda/${route.id ? encodeURIComponent(route.id) : 'bozza'}`
+    case 'guida':
+      return `/guida/${encodeURIComponent(route.id)}`
     default:
       return `/${route.name}`
   }
@@ -51,6 +55,8 @@ export function parsePath(pathname: string, search = ''): Route {
       return { name: first }
     case 'scheda':
       return { name: 'scheda', id: !second || second === 'bozza' ? null : second }
+    case 'guida':
+      return second ? { name: 'guida', id: second } : { name: 'crea' }
     default:
       return { name: 'oggi' }
   }

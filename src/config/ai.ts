@@ -7,7 +7,15 @@ export const AI_MODELS = {
   image: 'gpt-image-2.5-sunburst',
   /** Modello di testo economico: traduzione dell'azione, titoli e tag */
   text: 'gpt-6-luna',
+  /** Guide per genitori e scuola: modello più capace (verificato sulla documentazione OpenAI, ottobre 2026) */
+  guide: 'gpt-6.1-sol',
 }
+
+/** Guide: sforzo di ragionamento del modello (più alto = più lento e più caro) */
+export const AI_GUIDE_REASONING = 'low'
+
+/** Guide generate per centro al giorno (ogni "Rigenera questo punto" conta come una). Variabile AI_TEXT_LIMIT. */
+export const AI_TEXT_LIMIT_DEFAULT = 40
 
 /**
  * Versione da colorare: prompt fisso, la vignetta originale come unica immagine.

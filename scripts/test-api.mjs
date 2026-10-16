@@ -1,4 +1,4 @@
-// Collaudo delle funzioni /api (login, centro, membri, bambini, profilo, obiettivi, materiali)
+// Collaudo delle funzioni /api (login, centro, membri, bambini, profilo, obiettivi, materiali, guida con OpenAI simulato)
 // contro un PostgreSQL locale. Le chiavi JWT le genera il test; le API di amministrazione di Supabase
 // (inviti, azzera MFA) non sono coperte.
 // Prima: database usa e getta con supabase/tests/stub_supabase.sql e le migrazioni, poi
@@ -367,6 +367,71 @@ assert.equal(n, 0, 'eliminando il bambino spariscono i suoi materiali')
 const entries = await sql`select action, entity, details from app.audit_log where child_id = ${child.id} order by id`
 assert.ok(entries.some((a) => a.action === 'legge' && a.entity === 'children'))
 assert.ok(!JSON.stringify(entries).includes('Dinosauri') && !JSON.stringify(entries).includes('Sofi'))
+
+
+// ——— Guida (OpenAI simulato) ———
+const guideApi = await import('../.apitest/api/guide.js')
+const realFetch = globalThis.fetch
+const openaiCalls = []
+process.env.OPENAI_API_KEY = 'test'
+globalThis.fetch = async (url, init) => {
+  if (!String(url).startsWith('https://api.openai.com')) return realFetch(url, init)
+  const body = JSON.parse(init.body)
+  openaiCalls.push(body)
+  const name = body.text.format.name
+  const points = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`punto_${i + 1}`, `**Testo** ${i + 1}\n\n\n- riga`]))
+  const value = name === 'guide' ? { famiglia: points, scuola: points } : { testo: 'Punto riscritto' }
+  return new Response(
+    JSON.stringify({
+      output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(value) }] }],
+      usage: { input_tokens: 1000, output_tokens: 3000 },
+    }),
+    { status: 200, headers: { 'content-type': 'application/json' } },
+  )
+}
+const input = { difficulty: 'Lancia gli oggetti quando deve smettere di giocare', goal: 'Accettare la fine del gioco', situations: '', ageBand: '3-5', familyLanguage: 'semplice' }
+
+r = await call(guideApi, 'POST', '/api/guide', ta, { input: { ...input, goal: '' } })
+assert.equal(r.status, 400)
+r = await call(guideApi, 'POST', '/api/guide', ta, { input: { ...input, situations: 'scrivere a mamma@esempio.it' } })
+assert.equal(r.status, 400)
+assert.match(r.body.error, /indirizzo email/)
+r = await call(guideApi, 'POST', '/api/guide', ta, { input: { ...input, difficulty: 'Stella lancia gli oggetti' } })
+assert.equal(r.status, 400, 'pseudonimo di un bambino del centro')
+assert.match(r.body.error, /Stella/)
+r = await call(guideApi, 'POST', '/api/guide', ta, { input: { ...input, difficulty: 'Sofi lancia gli oggetti' } })
+assert.equal(r.status, 400, 'nome sui materiali (cifrato) di un bambino del centro')
+assert.equal(openaiCalls.length, 0, 'niente chiamate con dati identificativi')
+
+r = await call(guideApi, 'POST', '/api/guide', tb, { input })
+assert.equal(r.status, 200, JSON.stringify(r.body))
+assert.equal(r.body.family.length, 10)
+assert.equal(r.body.school.length, 10)
+assert.equal(r.body.family[0], 'Testo 1\n\n- riga', 'testo ripulito')
+assert.equal(openaiCalls[0].model, 'gpt-6.1-sol')
+assert.equal(openaiCalls[0].store, false)
+assert.equal(openaiCalls[0].input[1].content, 'Difficoltà osservata: Lancia gli oggetti quando deve smettere di giocare\nObiettivo: Accettare la fine del gioco\nFascia d\'età: 3-5 anni\nLinguaggio per la famiglia: semplice')
+r = await call(guideApi, 'POST', '/api/guide', tb, { input, point: { version: 'scuola', index: 3, current: 'vecchio testo' } })
+assert.equal(r.body.text, 'Punto riscritto')
+assert.match(openaiCalls[1].input[1].content, /Versione attuale del punto:\nvecchio testo/)
+r = await call(guideApi, 'POST', '/api/guide', tb, { input, point: { version: 'scuola', index: 3, current: 'chiamare il 333 1234567' } })
+assert.equal(r.status, 400, 'anche il punto attuale si controlla')
+const logged = await sql`select kind, fields_sent, model, input_tokens, output_tokens, cost_estimate_usd from app.ai_requests where model = 'gpt-6.1-sol' order by created_at`
+assert.equal(logged.length, 2)
+assert.deepEqual(logged[0].fields_sent, ['difficolta', 'obiettivo', 'fascia_eta', 'linguaggio'])
+assert.deepEqual(logged[1].fields_sent, ['difficolta', 'obiettivo', 'fascia_eta', 'linguaggio', 'punto_attuale'])
+assert.equal(Number(logged[0].cost_estimate_usd), 0.032)
+assert.ok(!JSON.stringify(logged).includes('Lancia'), 'mai il contenuto nel registro')
+// Limite giornaliero
+process.env.AI_TEXT_LIMIT = '2'
+r = await call(guideApi, 'POST', '/api/guide', tb, { input })
+assert.equal(r.status, 429)
+assert.match(r.body.error, /Limite giornaliero/)
+delete process.env.AI_TEXT_LIMIT
+// Senza centro: niente
+r = await call(guideApi, 'POST', '/api/guide', await token('00000000-0000-0000-0000-0000000000dd'), { input })
+assert.equal(r.status, 403)
+globalThis.fetch = realFetch
 
 console.log('API: tutti i test superati')
 await sql.end()

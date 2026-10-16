@@ -127,8 +127,22 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
   - `BLOB_READ_WRITE_TOKEN`: creata da Vercel collegando uno store Blob al progetto (o OIDC con `BLOB_STORE_ID`)
   - `AI_LIMIT`: immagini per periodo (prototipo: 100; senza variabile: 30)
   - `AI_LIMIT_PERIOD`: `giorno` o `mese` (senza variabile: `giorno`)
+  - `AI_TEXT_LIMIT`: guide (e punti rigenerati) per centro al giorno (senza variabile: 40)
   - Le modifiche alle variabili valgono dal deploy successivo (Redeploy)
   - `APP_PASSWORD`: la password dell'app (vedi "Deploy")
+
+## Guida per genitori e scuola
+- Crea → "Guide per genitori e scuola" (`src/components/GuidesSection.tsx`): nuova guida ed elenco; editor a schermo intero `/guida/{id}` (`src/views/GuideEditor.tsx`). Serve il login: le guide stanno sul server come materiali generici di tipo `guida` (`src/lib/guide.ts`)
+- L'utente scrive difficoltà osservata, obiettivo, situazioni (facoltativo), fascia d'età (3-5, 6-8) e linguaggio per la famiglia; ogni campo ha l'avviso privacy. "Cosa viene inviato all'AI" mostra esattamente il testo della richiesta (`guideRequestText`)
+- Dati identificativi: l'app blocca l'invio se trova email, telefono, codice fiscale, date, indirizzi o i nomi delle cartelle e delle schede del browser; il server ripete i controlli sui formati e sui pseudonimi e nomi sui materiali dei bambini del centro (`identifyingProblems` in `src/config/guide.ts`)
+- `/api/guide`: proposta completa (versione famiglia e scuola, 10 punti della specifica, sezione 10) o un solo punto ("Rigenera questo punto"). Regole fisse del testo in `GUIDE_INSTRUCTIONS` (bozza, ipotesi sempre "da verificare", niente diagnosi, farmaci o punizioni, linguaggio positivo). Modello `AI_MODELS.guide` (`gpt-6.1-sol`, ragionamento `low`), `store: false`. Ogni chiamata in `ai_requests` (solo nomi dei campi, token, costo stimato). Limite per centro al giorno: `AI_TEXT_LIMIT` (predefinito 40)
+- Ogni punto è "Da rivedere" finché non si preme "Confermo"; modificare un punto confermato lo riporta "Da rivedere". Il PDF (A4 verticale, versione famiglia, scuola o entrambe, punti distribuiti sulle pagine misurandone l'altezza: `src/lib/exportGuide.tsx`) si crea solo con tutti i punti della versione scelta scritti e confermati; ogni export salva una versione fissa
+- Salvataggio: `useAutosave` (vedi "Salvataggio sul server")
+
+## Salvataggio sul server (`src/lib/useAutosave.ts`)
+- Ogni modifica si salva da sola dopo 0,8 s con la revisione di partenza (`materialsApi.save`)
+- Senza rete o con il server giù: "Non salvato, riprovo…", nuovo tentativo ogni 5 s e al ritorno della rete; le modifiche restano nel browser (`emovere.pending.v1`) anche dopo una ricarica e si salvano alla riapertura
+- Revisione cambiata altrove (409): finestra obbligatoria con "Tieni la mia", "Usa quella salvata", "Salva la mia come copia" (nuovo materiale, la versione salvata altrove resta intatta)
 
 ## Costi AI e versione in vendita (piano, non ancora fatto)
 - Costo: il listino OpenAI per `gpt-image-2.5` è a token (immagini in uscita $30/M, in ingresso $8/M) senza prezzo per immagine; stima 5-10 centesimi per immagine, 10-25 per vignetta (2 immagini + testo, che costa quasi nulla). Il costo reale si legge nella pagina Usage di OpenAI
