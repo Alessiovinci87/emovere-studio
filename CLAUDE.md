@@ -2,6 +2,40 @@
 
 Strumento per comporre schede visive (routine, storie sociali, prima/poi, scelte) per bambini 3-8 anni con autismo, ADHD e DOP, partendo da una libreria di vignette illustrate. Utente iniziale: Martina (psicopedagogista, Centro Emovere). Obiettivo commerciale futuro: vendita ad altri professionisti.
 
+## Nuova direzione del progetto (ottobre 2026)
+- `docs/specifica-martina.pdf`: specifica funzionale di Martina ("Assistente per la progettazione di materiali educativi e comportamentali"). Il software passa da compositore di schede ad assistente alla progettazione educativa: obiettivo → situazione → competenza → supporto → personalizzazione → generazione → revisione → utilizzo → osservazione
+- `docs/PIANO.md`: piano di sviluppo (Fase 0 fondamenta: login, database in UE, privacy; Fasi 1-3), confronto con il prototipo attuale, decisioni aperte e rischi
+- Questi due documenti sono il riferimento per le nuove funzioni. La Fase 0 è avviata: le regole "niente login, niente database" della sezione seguente non valgono più per il nuovo codice
+
+## Fase 0 – decisioni approvate (16 ottobre 2026)
+- Backend: Supabase, progetto `vrlryycceswltabasogi` in regione **Irlanda (eu-west-1)**; schema multi-centro con `organizations` da subito
+- Funzioni Vercel nella stessa zona del database: regione `dub1` (Dublino), impostata in `vercel.json` (`regions`). Il Blob delle immagini resta in `fra1` (sempre UE)
+- Tutti i dati dei bambini passano solo da `/api`; cifratura AES-256-GCM lato server a chiave doppia (chiave dati per centro, cifrata con `DATA_ENCRYPTION_KEY`)
+- Ordine dei lavori: 1. migrazioni SQL e RLS · 2. login, MFA e inviti · 3. funzioni `/api` con cifratura · 4. app collegata al server al posto di `store.ts` · 5. migrazione da localStorage/backup · 6. export e cancellazione, audit, cron · 7. funzioni AI con `ai_requests` e anteprima dei dati inviati
+- Titolare del trattamento: Centro Emovere (da confermare col consulente privacy). Fornitore AI per i testi: da decidere
+
+## Prerequisiti per usare dati veri (regola fissa)
+- Durante lo sviluppo: piani gratuiti di Supabase e Vercel, **solo dati di prova** (pseudonimi inventati)
+- Prima di inserire dati reali, tutti obbligatori:
+  1. Supabase Pro (backup giornalieri, protezione dalle password già rubate) e Vercel Pro (uso commerciale)
+  2. DPA firmati (Supabase, OpenAI e l'eventuale fornitore dei testi)
+  3. Parere del consulente privacy (informativa e consenso dei genitori, registro dei trattamenti, DPIA)
+  4. Reset della password del database Supabase (quella attuale è stata condivisa in chat) e nuovo supabase link
+  5. Il titolare attiva "Privacy verificata" (`organizations.privacy_verified_at`, solo ruolo `titolare`)
+- Finché "Privacy verificata" non è attiva, la schermata Bambini mostra l'avviso "Solo dati di prova" (`TestDataWarning` in `src/components/ui.tsx`). Prima del login l'avviso è sempre visibile
+
+## Database (Supabase)
+- Migrazioni in `supabase/migrations/` (versionate), configurazione CLI in `supabase/config.toml`. Si applicano con `npx supabase db push` dopo `npx supabase link --project-ref vrlryycceswltabasogi`. Pooler (per `DATABASE_URL`): `aws-0-eu-west-1.pooler.supabase.com`, utente `postgres.vrlryycceswltabasogi`; la password del database non va mai in chat né nel codice
+- Tabelle nello schema `app`, **non esposto** dalla Data API: non aggiungerlo mai a `schemas` in `config.toml`. Funzioni di supporto e trigger nello schema `private`
+- Le funzioni `/api` si collegano con `DATABASE_URL` e in ogni transazione fanno `set local role emovere_app` e `set_config('app.user_id', <utente verificato dal JWT>, true)`: la RLS vale anche per il server. `private.uid()` legge `app.user_id`
+- Ruoli nel centro (`memberships.role`): `titolare` (nome reale, eliminazioni definitive, membri, impostazioni, "Privacy verificata", registro accessi) e `operatore` (bambini, profilo, obiettivi, materiali, osservazioni; elimina solo nel cestino)
+- Tabelle: `organizations`, `memberships`, `children` (pseudonimo, codice B-0001 automatico), `child_identity` (nome reale, solo titolare), `child_profile_entries` (una riga per informazione, con `section` e `source`: osservato, genitori, scuola, ipotesi), `goals` + `goal_events`, `materials` + `material_versions` + `material_goals`, `templates` (`org_id` null = modelli di sistema), `observations` (dati registrati separati da note e interpretazioni), `ai_requests` (solo i nomi dei campi inviati), `audit_log`
+- Colonne `*_enc`: solo testo cifrato nel formato `ev1:{versione chiave}:{IV}:{cifrato}` (dominio `app.encrypted_text`, il testo in chiaro viene rifiutato)
+- `content` dei materiali e dei modelli non contiene `childName` né `notes` (vincolo `private.content_is_clean`); il titolo si salva senza il nome del bambino, che si aggiunge all'export
+- Ogni riga ha `org_id`; le chiavi esterne composte impediscono collegamenti tra centri diversi o tra bambini diversi; `org_id` non cambia mai
+- Storico, versioni e registri si possono solo aggiungere; cestino di 30 giorni (`deleted_at`, `private.purge_deleted()`)
+- Collaudo: `bash scripts/test-db.sh` su un PostgreSQL locale (variabili `PGHOST`, `PGPORT`, `PGUSER`): database usa e getta con `supabase/tests/stub_supabase.sql`, migrazioni e `supabase/tests/rls_test.sql`. Ogni migrazione nuova va accompagnata dai suoi test
+
 ## Obiettivo di questa fase
 Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. Niente login, niente database: dati delle schede nel browser. Unica parte server: le funzioni Vercel per creare vignette con AI. Velocità e semplicità prima di tutto.
 

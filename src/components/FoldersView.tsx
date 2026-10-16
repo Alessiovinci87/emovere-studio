@@ -4,7 +4,7 @@ import type { Folder, Sheet } from '../types'
 import { Page, SectionHeader } from './AppShell'
 import { Modal } from './Modal'
 import { StatusCounts } from './Status'
-import { Button, NameInput } from './ui'
+import { Button, NameInput, TestDataWarning } from './ui'
 
 interface Props {
   folders: Folder[]
@@ -29,6 +29,8 @@ export function FoldersView({ folders, sheets, onOpenFolder, onCreateFolder }: P
           </Button>
         }
       />
+
+      <TestDataWarning />
 
       {sorted.length === 0 ? (
         <div className="rounded-3xl bg-sand/60 px-6 py-12 text-center text-muted">

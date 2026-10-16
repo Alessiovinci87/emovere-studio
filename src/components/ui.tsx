@@ -12,6 +12,23 @@ export function PrivacyNote({ id }: { id?: string }) {
   )
 }
 
+/**
+ * Avviso fisso nella schermata Bambini finché il titolare non attiva "Privacy verificata"
+ * (organizations.privacy_verified_at). Prima del login non si può attivare: resta sempre visibile.
+ */
+export function TestDataWarning() {
+  return (
+    <div role="note" className="mb-6 flex items-start gap-3 rounded-3xl border-2 border-[#e0b483] bg-[#fdf1e2] px-5 py-4 text-[#7a4f22]">
+      <span aria-hidden="true" className="text-2xl leading-none">⚠️</span>
+      <p className="text-sm leading-relaxed">
+        <strong className="block text-base">Solo dati di prova</strong>
+        Finché la privacy non è verificata con il consulente, non inserire bambini reali: usa pseudonimi
+        inventati e nessuna informazione vera.
+      </p>
+    </div>
+  )
+}
+
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
