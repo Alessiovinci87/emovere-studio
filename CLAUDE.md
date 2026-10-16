@@ -46,10 +46,21 @@ Strumento per comporre schede visive (routine, storie sociali, prima/poi, scelte
 - `legacyId` in creazione rende l'importazione ripetibile senza doppioni (punto 5)
 - Registro: letture del dettaglio di un bambino o di un suo materiale e tutte le modifiche finiscono in `audit_log` (solo id e nomi dei campi)
 - Funzioni Vercel: oggi 10 file in `api/`. Il piano Hobby ha un limite al numero di funzioni per deploy: raggruppare per risorsa (`?resource=`, `?action=`) invece di creare un file per operazione
-- Decisioni per il punto 4 (collegamento dell'app):
-  - Offline: le modifiche restano in attesa nel browser e si salvano al ritorno della rete, con l'avviso "Non salvato, riprovo…"
-  - Mai "vince l'ultimo": se il server risponde 409 l'app mostra un avviso e lascia scegliere tra la versione del server, la propria, o salvare la propria come copia
-  - La bozza diventa un materiale generico sul server (`child_id` null), così si ritrova su tutti i dispositivi
+- Punto 4, l'app usa il server (`src/lib/useServerData.ts`, `src/lib/sync.ts`, conversioni in `src/lib/serverData.ts`):
+  - L'app lavora ancora su `StoreData` con le operazioni pure di `store.ts`; il motore `ServerSync` confronta i dati con l'ultima versione salvata e manda solo le differenze (cartella → `/api/children`, scheda → `/api/materials`; eliminare = cestino). Gli id li genera l'app (`newId`), il server li accetta: un nuovo tentativo dopo una risposta persa non crea doppioni (409 → già creato)
+  - Cartella = bambino: nome = pseudonimo, appunti cifrati (`children.notes_enc`), "Nome sulle schede" = `material_name` cifrato, uno per bambino: cambiandolo da una scheda cambia in tutte le sue schede (`store.setChildName`)
+  - Il titolo si salva senza " di {nome}" (`sheetToServer`, flag `nameInTitle` nel contenuto); le copie mettono "(copia)" prima del nome (`copyTitle`), così il nome non finisce mai in chiaro nel titolo
+  - Offline: "Non salvato, riprovo…" (editor e barra in alto), nuovo tentativo ogni 5 s e al ritorno della rete; le modifiche non salvate restano nel browser (`emovere.sync.v1:{centro}`) e alla riapertura si rimettono sopra i dati del server, con la revisione di allora
+  - Mai "vince l'ultimo": conflitto di revisione → finestra obbligatoria "Tieni la mia" / "Usa quella salvata" / "Salva la mia come copia"; se la scheda non è aperta, avviso in alto con "Apri"
+  - Niente più bozza unica: le schede senza bambino sono materiali generici sul server ("Schede senza bambino" in Bambini, "Metti in una cartella" nell'editor); `/scheda/bozza` porta a Oggi
+  - Impostazioni del centro (logo, nome, stampatello) in `organizations.settings`: le cambia il titolare, valgono per tutti; copia nel browser come riserva
+- Punto 5, importazione (`src/lib/importLocal.ts`, `src/components/ImportDialog.tsx`):
+  - Se nel browser ci sono cartelle, schede o bozza della versione precedente, Oggi e Impostazioni propongono "Importa"; anche "Importa backup" (file) usa la stessa finestra e **aggiunge** al centro, non sostituisce
+  - Per ogni cartella: pseudonimo, "È il nome vero del bambino" (allora serve un altro pseudonimo; il nome vero si conserva cifrato solo se importa il titolare), "Nome sulle schede" (proposto: il nome più usato nelle sue schede)
+  - Cartelle e schede portano il loro id originale (`legacyId`): ripetere l'importazione non crea doppioni. La bozza diventa una scheda senza bambino. Le impostazioni passano al centro solo se importa il titolare e il centro non ne ha
+  - Dopo l'importazione (`emovere.imported.v1`) i dati restano nel browser finché in Impostazioni non si sceglie "Elimina la copia da questo browser"
+- Prima di ogni deploy che cambia lo schema: applicare le migrazioni (`npx supabase db push`), altrimenti le funzioni falliscono
+- Collaudo in locale con il server di prova (`scripts/dev-api.mjs`): PostgreSQL locale con `supabase/tests/stub_supabase.sql` e le migrazioni nel database `DEV_DATABASE_URL` (predefinito `postgres://postgres@localhost:5432/emovere_dev`); `npm run dev:api` (funzioni vere, login simulato, titolare di prova) e in un altro terminale `npm run dev:server` (Vite in modo `devapi`, `/api` → porta 8787). Senza server, `npm run dev` mostra "Serve il server"
 
 ## Database (Supabase)
 - Migrazioni in `supabase/migrations/` (versionate), configurazione CLI in `supabase/config.toml`. Si applicano con `npx supabase db push` dopo `npx supabase link --project-ref vrlryycceswltabasogi`. Pooler (per `DATABASE_URL`): `aws-0-eu-west-1.pooler.supabase.com`, utente `postgres.vrlryycceswltabasogi`; la password del database non va mai in chat né nel codice
@@ -70,7 +81,7 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
 - React + Vite + TypeScript, Tailwind CSS
 - Immagini in `public/library/` (vedi sotto), catalogo in `src/data/catalog.json`
 - Funzioni Vercel in `api/` (solo per le vignette AI, vedi "Vignette con AI"); vignette AI e indice su Vercel Blob privato
-- Cartelle, schede e bozza in localStorage (solo per il prototipo), con backup JSON esportabile
+- Cartelle e schede sul server (Supabase, vedi "Dati dei bambini sul server"), con backup JSON esportabile; nel browser restano solo impostazioni di comodo e le modifiche in attesa di salvataggio
 - Export PDF lato client: la scheda è un DOM in formato A4, esportato con `html-to-image` + `jsPDF`
 - Deploy di prova su Vercel, protetto da password (vedi "Deploy")
 
@@ -91,18 +102,18 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
 ## Privacy (regola fissa)
 - Nei campi con nomi (cartella, nome del bambino) e negli appunti compare sempre l'avviso: "Usa solo nome o iniziali. Non inserire diagnosi o dati clinici." (`PRIVACY_TEXT` / `PrivacyNote` in `src/components/ui.tsx`)
 - Ogni nuovo campo di testo libero riferito a un bambino deve mostrare lo stesso avviso
-- Nessun dato lascia il browser, tranne i file che l'utente scarica (PDF, .ics, backup). I nomi dei file .ics e di backup non contengono nomi di bambini
+- I dati dei bambini stanno sul server del centro (UE), con i campi sensibili cifrati; all'AI vanno solo i testi mostrati nell'anteprima, mai nomi. I nomi dei file .ics e di backup non contengono nomi di bambini
 
 ## Interfaccia (struttura da app)
-- 5 sezioni, ognuna con il suo URL e un titolo in alto (`SectionHeader`): **Oggi** (`/oggi`, schermata iniziale), **Bambini** (`/bambini`, `/bambini/{id}`), **Crea** (`/crea`, `/crea?cartella={id}`), **Libreria** (`/libreria`), **Impostazioni** (`/impostazioni`). Editor: `/scheda/{id}` o `/scheda/bozza`
+- 5 sezioni, ognuna con il suo URL e un titolo in alto (`SectionHeader`): **Oggi** (`/oggi`, schermata iniziale), **Bambini** (`/bambini`, `/bambini/{id}`), **Crea** (`/crea`, `/crea?cartella={id}`), **Libreria** (`/libreria`), **Impostazioni** (`/impostazioni`). Editor: `/scheda/{id}`; guida: `/guida/{id}`
 - Router senza librerie in `src/lib/router.ts` (History API): funzionano Indietro dell'app, del browser e il gesto su tablet/telefono; dopo una ricarica si resta sulla stessa schermata. `vercel.json` rimanda tutti gli URL (tranne `/api/`) a `index.html`
 - Navigazione (`AppShell`): desktop ≥ 1024 px barra laterale fissa a sinistra; tablet e telefono barra fissa in basso. Icone + nomi, aree touch ≥ 44 px, badge su "Oggi" con promemoria + backup
 - Oggi: "Da fare" (promemoria di oggi e scaduti + "Fai un backup"), schede "In lavorazione", ultime 6 schede aperte (`sheet.openedAt`)
 - Bambini: cartelle in card con contatori per stato; dentro, schede raggruppate per stato e appunti della cartella
-- Crea: galleria dei modelli con anteprima e descrizione; scelto il modello si sceglie la cartella (anche nuova) o "Bozza", poi si apre l'editor
+- Crea: galleria dei modelli con anteprima e descrizione; scelto il modello si sceglie la cartella (anche nuova) o "Senza bambino", poi si apre l'editor
 - Libreria: ricerca e filtri in una barra fissa in alto; toccare una vignetta la aggiunge al primo riquadro vuoto dell'ultima scheda aperta
 - Impostazioni: esporta/importa backup, data dell'ultimo backup, privacy, versione (da `package.json`, `__APP_VERSION__`)
-- Editor a schermo intero (`src/components/Editor.tsx`, la navigazione si nasconde): barra in alto con Indietro/Fatto, titolo, stato, bambina/bambino, Salva (bozza), menu Esporta (PDF stampa, PDF WhatsApp e, con il cerchietto, stelline); pannello opzioni a sinistra richiudibile (su telefono sale dal basso, con stato e personaggio); foglio al centro adattato allo schermo, zoom −/+/Adatta
+- Editor a schermo intero (`src/components/Editor.tsx`, la navigazione si nasconde): barra in alto con Indietro/Fatto, titolo, stato del salvataggio, bambina/bambino, "Metti in una cartella" (schede senza bambino), menu Esporta (PDF stampa, PDF WhatsApp e, con il cerchietto, stelline); pannello opzioni a sinistra richiudibile (su telefono sale dal basso, con stato e personaggio); foglio al centro adattato allo schermo, zoom −/+/Adatta
 - Stile: sfondo crema, card bianche con angoli arrotondati e ombra leggera, molto spazio. **Un solo colore di accento** (`--color-accent`, blu `#3f74b8`, e `accent-soft`) per pulsanti principali, voce attiva, badge e focus. I colori di stati e passaggi sono contenuto, non accento
 
 ## Vignette con AI
@@ -178,18 +189,18 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
 4. **Cartelle e schede**:
    - Una cartella per bambino (solo nome o iniziali): crea, rinomina, elimina (elimina anche le sue schede), appunti
    - Schermata principale: elenco cartelle con contatori per stato; dentro la cartella, schede raggruppate per stato
-   - Schede: salva (una scheda nuova è una bozza finché non la si salva in una cartella; dopo, le modifiche si salvano da sole), apri, duplica (anche in un'altra cartella), sposta, elimina, appunti
+   - Schede: si salvano da sole sul server (anche quelle senza bambino), apri, duplica (anche in un'altra cartella), sposta, elimina (cestino), appunti
    - Stato: Da fare, In lavorazione, Pronta, Stampata/Consegnata. Nella cartella un clic sull'etichetta apre un menu con i 4 stati; nel composer si sceglie direttamente
    - Promemoria: una data e un tipo (Creare, Stampare, Consegnare, Rivedere) per scheda. Quelli di oggi e scaduti non fatti compaiono in "Da fare" nella sezione Oggi (schermata iniziale), con badge sulla voce "Oggi". "Aggiungi al calendario" scarica un .ics (evento di un giorno, avviso alle 9)
-   - Backup: "Esporta tutto" (JSON con cartelle e schede, non la bozza) e "Importa backup" (sostituisce tutto, dopo conferma). La data dell'ultimo export è in localStorage (`emovere.lastBackup.v1`): se ci sono schede salvate e il backup manca o ha più di 7 giorni, "Da fare" (sezione Oggi) mostra "Fai un backup" con il pulsante diretto (conta nel badge)
-   - Dopo il PDF di una bozza non salvata si propone di salvarla in una cartella ("No, grazie" non la ripropone per quella bozza)
+   - Backup: "Esporta tutto" (JSON con cartelle e schede) e "Importa backup" (aggiunge al centro senza doppioni, vedi punto 5). La data dell'ultimo export è in localStorage (`emovere.lastBackup.v1`): se ci sono schede salvate e il backup manca o ha più di 7 giorni, "Da fare" (sezione Oggi) mostra "Fai un backup" con il pulsante diretto (conta nel badge)
+   - Dopo il PDF di una scheda senza bambino si propone di metterla in una cartella ("No, grazie" non la ripropone per quella scheda)
    - Navigazione: vedi "Interfaccia"
    - Dati in `src/lib/store.ts` (operazioni pure `StoreData → StoreData`); le schede salvate con versioni precedenti vengono completate da `normalizeSheet`
 5. **Export**: "PDF stampa" (A4, 300 dpi, margini 10 mm, pronto da plastificare) e "PDF WhatsApp" (immagini compresse, file leggero).
 
 ## Schede pronte
 - `src/data/presets.json`: `id`, `titolo`, `sottotitolo`, `template`, `scene` (codici in ordine), `opzioni` (es. `uppercase`, `doneCircle`, `timeMode`, `coloring`)
-- In Crea, sezione "Pronte da usare" sopra i modelli vuoti; al clic si scelgono personaggio e cartella (o bozza) e si apre l'editor già compilato
+- In Crea, sezione "Pronte da usare" sopra i modelli vuoti; al clic si scelgono personaggio e cartella (o senza bambino) e si apre l'editor già compilato
 - I titoli con "o/a" si adattano al personaggio ("Pronto/a" → "Pronta"/"Pronto"); con la cartella si aggiunge il nome ("… di Luca")
 - Le schede pronte con codici non presenti nel catalogo (o modello inesistente) non vengono mostrate
 
@@ -200,7 +211,7 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
 - Trascinando, due celle si scambiano di posto (gli altri giorni non scorrono). "→ Domani" copia una cella nel giorno dopo; la freccia nell'intestazione del giorno copia l'intera colonna (con conferma se sovrascrive)
 
 ## Logo e nome del centro
-- Impostazioni (`src/lib/settings.ts`, localStorage `emovere.settings.v1`): logo PNG/JPG/SVG ridotto a max 600 px e salvato come PNG, nome del centro, stampatello predefinito. Inclusi in "Esporta tutto" e "Importa backup" (campo `settings`; i backup più vecchi senza impostazioni le lasciano come sono)
+- Impostazioni (`src/lib/settings.ts`; sul server in `organizations.settings`, le cambia il titolare; copia in localStorage `emovere.settings.v1`): logo PNG/JPG/SVG ridotto a max 600 px e salvato come PNG, nome del centro, stampatello predefinito. Inclusi in "Esporta tutto" e "Importa backup" (campo `settings`; i backup più vecchi senza impostazioni le lasciano come sono)
 - Per scheda "Mostra logo" (`showLogo`, null = automatico: sì se c'è un logo): piè di pagina sottile nel margine inferiore (logo piccolo + nome, a sinistra), non toglie spazio alle vignette; presente anche nelle pagine di stelline e carte
 
 ## Aspetto della pagina

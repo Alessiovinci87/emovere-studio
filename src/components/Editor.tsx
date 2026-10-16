@@ -5,6 +5,7 @@ import { lookFor } from '../lib/look'
 import type { AppSettings } from '../lib/settings'
 import { CHECKLIST_ROWS, canReorder, changeTemplate, retitleForName, templateList, templates, usesDoneCircle } from '../lib/sheet'
 import { CIRCLE, cutoutGrid } from '../lib/stars'
+import type { SyncStatus } from '../lib/sync'
 import type { CellShow, Folder, Sheet, TemplateId, TimeMode } from '../types'
 import { CharacterToggle } from './CharacterToggle'
 import { BackIcon, CloseIcon, DownloadIcon, FitIcon, MinusIcon, PanelIcon, PlusIcon, SlidersIcon } from './Icons'
@@ -27,6 +28,8 @@ export interface ColoringState {
 }
 
 interface Props {
+  /** Stato del salvataggio sul server */
+  sync: SyncStatus
   sheet: Sheet
   folder: Folder | undefined
   settings: AppSettings
@@ -43,6 +46,7 @@ interface Props {
 
 /** Editor della scheda a schermo intero: la navigazione dell'app si nasconde. */
 export function Editor({
+  sync,
   sheet,
   folder,
   settings,
@@ -106,8 +110,11 @@ export function Editor({
 
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="truncate font-bold leading-tight">{sheet.title || 'Senza titolo'}</span>
-          <span className="truncate text-xs text-muted">
-            {folder ? `📁 ${folder.name} · salvata` : 'Bozza non salvata'} · {templates[sheet.template].label}
+          <span
+            role="status"
+            className={`truncate text-xs ${sync.state === 'waiting' || sync.state === 'error' || sync.conflicts.has(sheet.id) ? 'font-bold text-[#a2472f]' : 'text-muted'}`}
+          >
+            {folder ? `📁 ${folder.name}` : 'Senza bambino'} · {syncText(sync, sheet.id)} · {templates[sheet.template].label}
           </span>
         </div>
 
@@ -118,7 +125,7 @@ export function Editor({
 
         {!folder && (
           <Button tone="primary" onClick={onSave} className="hidden shrink-0 sm:block">
-            Salva
+            Metti in una cartella
           </Button>
         )}
 
@@ -221,8 +228,8 @@ export function Editor({
         <Modal title="Salvare la scheda?" onClose={() => setAskSave(false)} size="sm">
           <div className="flex flex-col gap-4">
             <p className="leading-relaxed">
-              Il PDF è pronto. Questa scheda però non è ancora in una cartella: salvala per ritrovarla e modificarla in
-              seguito.
+              Il PDF è pronto. Questa scheda è salvata senza bambino: se è per un bambino in particolare, mettila nella sua
+              cartella.
             </p>
             <div className="flex flex-wrap justify-end gap-2">
               <Button
@@ -240,7 +247,7 @@ export function Editor({
                   onSave()
                 }}
               >
-                Salva in una cartella
+                Metti in una cartella
               </Button>
             </div>
           </div>
@@ -248,6 +255,21 @@ export function Editor({
       )}
     </div>
   )
+}
+
+/** Stato del salvataggio della scheda aperta, per la barra in alto */
+function syncText(sync: SyncStatus, sheetId: string): string {
+  if (sync.conflicts.has(sheetId)) return 'Modificata altrove'
+  switch (sync.state) {
+    case 'saved':
+      return 'Salvata'
+    case 'saving':
+      return 'Salvo…'
+    case 'waiting':
+      return 'Non salvato, riprovo…'
+    case 'error':
+      return `Non salvato: ${sync.message ?? ''}`
+  }
 }
 
 /** Versione da colorare attiva ma incompleta: avviso con "Genera quelle mancanti". */
@@ -321,9 +343,10 @@ function EditorOptions({
         </div>
       ) : (
         <div className="flex flex-col gap-2 rounded-2xl bg-butter p-4">
-          <p className="text-sm font-bold">Scheda non ancora salvata</p>
+          <p className="text-sm font-bold">Scheda senza bambino</p>
+          <p className="text-xs leading-snug text-muted">Si salva da sola, senza riferimenti a un bambino. Si può usare con più bambini.</p>
           <Button tone="primary" onClick={onSave}>
-            Salva in una cartella
+            Metti in una cartella
           </Button>
         </div>
       )}
@@ -413,9 +436,11 @@ function EditorOptions({
         />
       )}
 
+      {folder && (
       <div className="flex flex-col gap-2">
-        <NameInput label="Nome del bambino (facoltativo)" value={sheet.childName} onChange={handleChildName} />
-        {folder && !sheet.childName.trim() && (
+        <NameInput label="Nome sulle schede (facoltativo)" value={sheet.childName} onChange={handleChildName} />
+        <p className="text-xs text-muted">Vale per tutte le schede di {folder.name}. Si conserva cifrato.</p>
+        {!sheet.childName.trim() && (
           <button
             onClick={() => handleChildName(folder.name)}
             className="self-start rounded-full bg-accent-soft px-3 py-1 text-xs font-bold text-accent hover:bg-accent/15"
@@ -424,6 +449,7 @@ function EditorOptions({
           </button>
         )}
       </div>
+      )}
 
       <Toggle
         label="Testo in stampatello maiuscolo"

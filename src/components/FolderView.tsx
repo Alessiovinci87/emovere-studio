@@ -8,6 +8,8 @@ import { Button, NotesField } from './ui'
 
 interface Props {
   folder: Folder
+  /** "Schede senza bambino": niente rinomina, eliminazione e appunti */
+  generic?: boolean
   sheets: Sheet[]
   onBack: () => void
   onRename: (name: string) => void
@@ -21,7 +23,7 @@ interface Props {
   onDeleteSheet: (id: string) => void
 }
 
-export function FolderView({ folder, sheets, onBack, onRename, onNotes, onDelete, onNewSheet, onOpenSheet, ...actions }: Props) {
+export function FolderView({ folder, generic, sheets, onBack, onRename, onNotes, onDelete, onNewSheet, onOpenSheet, ...actions }: Props) {
   const [renaming, setRenaming] = useState(false)
   const groups = statuses
     .map((s) => ({ ...s, sheets: sheets.filter((sh) => sh.status === s.id).sort((a, b) => b.updatedAt - a.updatedAt) }))
@@ -38,17 +40,21 @@ export function FolderView({ folder, sheets, onBack, onRename, onNotes, onDelete
             <Button tone="primary" onClick={onNewSheet}>
               + Nuova scheda
             </Button>
-            <Button onClick={() => setRenaming(true)}>Rinomina</Button>
-            <Button
-              tone="danger"
-              onClick={() => {
-                const n = sheets.length
-                const what = n === 0 ? '' : n === 1 ? ' e la sua scheda' : ` e le sue ${n} schede`
-                if (confirm(`Eliminare la cartella “${folder.name}”${what}? Non si può annullare.`)) onDelete()
-              }}
-            >
-              Elimina cartella
-            </Button>
+            {!generic && (
+              <>
+                <Button onClick={() => setRenaming(true)}>Rinomina</Button>
+                <Button
+                  tone="danger"
+                  onClick={() => {
+                    const n = sheets.length
+                    const what = n === 0 ? '' : n === 1 ? ' e la sua scheda' : ` e le sue ${n} schede`
+                    if (confirm(`Spostare nel cestino la cartella “${folder.name}”${what}? Il titolare può recuperarla entro 30 giorni.`)) onDelete()
+                  }}
+                >
+                  Elimina cartella
+                </Button>
+              </>
+            )}
           </>
         }
       />
@@ -80,7 +86,7 @@ export function FolderView({ folder, sheets, onBack, onRename, onNotes, onDelete
                     onDuplicate={() => actions.onDuplicate(sheet.id)}
                     onMove={() => actions.onMove(sheet.id)}
                     onDelete={() => {
-                      if (confirm(`Eliminare la scheda “${sheet.title || 'Senza titolo'}”? Non si può annullare.`))
+                      if (confirm(`Spostare nel cestino la scheda “${sheet.title || 'Senza titolo'}”? Il titolare può recuperarla entro 30 giorni.`))
                         actions.onDeleteSheet(sheet.id)
                     }}
                   />
@@ -90,9 +96,17 @@ export function FolderView({ folder, sheets, onBack, onRename, onNotes, onDelete
           ))}
         </div>
 
-        <aside className="rounded-3xl bg-white p-6 shadow-sm">
-          <NotesField value={folder.notes} onChange={onNotes} />
-        </aside>
+        {generic ? (
+          <aside className="rounded-3xl bg-white p-6 text-sm leading-relaxed text-muted shadow-sm">
+            Schede generiche, senza riferimenti a un bambino: si possono usare con più bambini. Con “Sposta” entrano nella
+            cartella di un bambino.
+          </aside>
+        ) : (
+          <aside className="flex flex-col gap-2 rounded-3xl bg-white p-6 shadow-sm">
+            {folder.code && <p className="text-xs font-bold text-muted">Codice interno {folder.code}</p>}
+            <NotesField value={folder.notes} onChange={onNotes} />
+          </aside>
+        )}
       </div>
 
       {renaming && (

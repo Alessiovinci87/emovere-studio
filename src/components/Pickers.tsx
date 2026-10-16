@@ -22,7 +22,7 @@ export function FolderPicker({
   confirmLabel: string
   folders: Folder[]
   initialFolderId?: string | null
-  /** Aggiunge la scelta "Bozza": la scheda non va in nessuna cartella per ora */
+  /** Aggiunge la scelta "Senza bambino": scheda generica, salvata senza cartella */
   allowDraft?: boolean
   /** Contenuto in più sopra la scelta della cartella (es. personaggio) */
   extra?: React.ReactNode
@@ -53,11 +53,11 @@ export function FolderPicker({
           ))}
           <OptionRow checked={selected === 'new'} onSelect={() => setSelected('new')} label="+ Nuova cartella" />
           {allowDraft && (
-            <OptionRow checked={selected === 'draft'} onSelect={() => setSelected('draft')} label="Bozza (decido dopo)" />
+            <OptionRow checked={selected === 'draft'} onSelect={() => setSelected('draft')} label="Senza bambino (si può usare con più bambini)" />
           )}
         </fieldset>
         {selected === 'new' && (
-          <NameInput label="Nome della nuova cartella" value={newName} onChange={setNewName} autoFocus />
+          <NameInput label="Pseudonimo del nuovo bambino" value={newName} onChange={setNewName} autoFocus />
         )}
         <div className="flex justify-end gap-2">
           <Button type="button" onClick={onClose}>

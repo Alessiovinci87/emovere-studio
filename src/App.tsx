@@ -1,5 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Session } from './AuthGate'
+import { ImportDialog } from './components/ImportDialog'
+import { accountApi } from './lib/account'
+import { localDataPresent, localImportAvailable, localImportDone, localImportSource, markLocalImported, type ImportSource } from './lib/importLocal'
+import { useServerData } from './lib/useServerData'
 import { AiCreateDialog } from './components/AiCreateDialog'
 import { AppShell, Page, SectionHeader } from './components/AppShell'
 import { Editor } from './components/Editor'
@@ -16,12 +20,12 @@ import { downloadBlob } from './lib/download'
 import { fetchColoringKeys, requestColoring } from './lib/coloring'
 import { coloringKey } from './lib/look'
 import { sheetFromPreset, type Preset } from './lib/presets'
-import { loadSettings, saveSettings, type AppSettings } from './lib/settings'
+import { loadSettings, normalizeSettings, saveSettings, type AppSettings } from './lib/settings'
 import { dueReminders, todayISO } from './lib/reminders'
 import { useRouter, type Route, type Section, sectionOf } from './lib/router'
-import { createSheet } from './lib/sheet'
+import { createSheet, newId } from './lib/sheet'
 import * as store from './lib/store'
-import type { Character, Scene, Sheet, StoreData, TemplateId } from './types'
+import type { Character, Folder, Scene, Sheet, StoreData, TemplateId } from './types'
 import { visibleIndexes } from './components/SheetView'
 import { CreateView, type CreateChoice } from './views/CreateView'
 import { SettingsView } from './views/SettingsView'
@@ -31,13 +35,56 @@ import { TodayView } from './views/TodayView'
 type FolderAction = { mode: 'save' } | { mode: 'duplicate'; sheetId: string } | { mode: 'move'; sheetId: string }
 type FolderChoice = { folderId: string } | { newName: string }
 
-const STORAGE_FULL = 'Spazio del browser esaurito: le ultime modifiche non sono salvate. Esporta un backup.'
+/** Cartella "virtuale" con le schede senza bambino (generiche, ex bozze) */
+const GENERIC_FOLDER: Folder = { id: '__generiche', name: 'Schede senza bambino', notes: '', createdAt: 0, updatedAt: 0 }
 
+/** Dati del centro dal server: senza accesso (o senza server in locale) l'app non parte. */
 export default function App({ session }: { session: Session }) {
+  const org = session.account?.organization
+  if (!org) {
+    return (
+      <CenteredMessage title="Serve il server">
+        In locale l’app lavora con il server di prova: avvia <code>npm run dev:api</code> e poi <code>npm run dev:server</code>{' '}
+        (istruzioni in CLAUDE.md).
+      </CenteredMessage>
+    )
+  }
+  return <ServerWorkspace key={org.id} session={session} orgId={org.id} />
+}
+
+function ServerWorkspace({ session, orgId }: { session: Session; orgId: string }) {
+  const server = useServerData(orgId)
+  if (!server.data) {
+    return server.loadError ? (
+      <CenteredMessage title="Dati non caricati" action={{ label: 'Riprova', run: () => void server.reload() }}>
+        {server.loadError}
+      </CenteredMessage>
+    ) : (
+      <CenteredMessage title="">Carico le schede…</CenteredMessage>
+    )
+  }
+  return <Workspace session={session} server={server} data={server.data} />
+}
+
+function CenteredMessage({ title, action, children }: { title: string; action?: { label: string; run: () => void }; children: ReactNode }) {
+  return (
+    <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-cream p-6 text-center">
+      {title && <h1 className="text-2xl font-bold">{title}</h1>}
+      <p className="max-w-md leading-relaxed text-muted">{children}</p>
+      {action && (
+        <Button tone="primary" onClick={action.run}>
+          {action.label}
+        </Button>
+      )}
+    </main>
+  )
+}
+
+function Workspace({ session, server, data }: { session: Session; server: ReturnType<typeof useServerData>; data: StoreData }) {
   const { route, depth, navigate, back } = useRouter()
-  const [data, setData] = useState<StoreData>(store.loadData)
-  /** Scheda non ancora salvata in una cartella */
-  const [draft, setDraft] = useState<Sheet>(store.loadDraft)
+  const { setData, status: sync, resolveConflict } = server
+  const isOwner = session.account?.organization?.role === 'titolare'
+  const [importSource, setImportSource] = useState<ImportSource | null>(null)
   const [libraryCharacter, setLibraryCharacter] = useState<Character>('bambina')
 
   /** Riquadro (indice) in cui va la vignetta scelta in libreria */
@@ -46,7 +93,8 @@ export default function App({ session }: { session: Session }) {
   const [folderAction, setFolderAction] = useState<FolderAction | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [lastBackup, setLastBackup] = useState<string | null>(store.loadLastBackup)
-  const [settings, setSettings] = useState<AppSettings>(loadSettings)
+  // Impostazioni del centro (sul server); prima di averle salvate lì vale la copia di questo browser
+  const [settings, setSettings] = useState<AppSettings>(() => orgSettings(session) ?? loadSettings())
   /** Vignette con la versione da colorare già pronta (chiavi "A01_bambina") */
   const [coloringKeys, setColoringKeys] = useState<ReadonlySet<string>>(() => new Set())
   const [coloringProgress, setColoringProgress] = useState<{ done: number; total: number } | null>(null)
@@ -65,15 +113,19 @@ export default function App({ session }: { session: Session }) {
     fetchColoringKeys().then(setColoringKeys)
   }, [applyAiScenes])
 
+  // Impostazioni: copia nel browser e, per il titolare, salvataggio sul server (dopo una breve pausa)
+  const savedSettings = useRef(JSON.stringify(orgSettings(session)))
   useEffect(() => {
-    if (!store.saveData(data)) setToast(STORAGE_FULL)
-  }, [data])
-  useEffect(() => {
-    if (!store.saveDraft(draft)) setToast(STORAGE_FULL)
-  }, [draft])
-  useEffect(() => {
-    if (!saveSettings(settings)) setToast('Spazio del browser esaurito: il logo è troppo grande per essere salvato.')
-  }, [settings])
+    saveSettings(settings)
+    if (!isOwner || JSON.stringify(settings) === savedSettings.current) return
+    const t = setTimeout(() => {
+      accountApi
+        .saveSettings(settings)
+        .then(() => (savedSettings.current = JSON.stringify(settings)))
+        .catch((err: Error) => setToast(err.message))
+    }, 800)
+    return () => clearTimeout(t)
+  }, [settings, isOwner])
   useEffect(() => {
     if (!toast) return
     const t = setTimeout(() => setToast(null), 3000)
@@ -82,40 +134,42 @@ export default function App({ session }: { session: Session }) {
 
   // Scheda aperta nell'editor (dall'URL): null = bozza
   const editingId = route.name === 'scheda' ? route.id : null
-  const editing = route.name === 'scheda' ? (route.id ? data.sheets.find((s) => s.id === route.id) : draft) : undefined
+  const editing = editingId ? data.sheets.find((s) => s.id === editingId) : undefined
   const editingFolder = editing ? data.folders.find((f) => f.id === editing.folderId) : undefined
 
-  /** Tutte le schede, bozza compresa (sezione Oggi, promemoria, "aperte di recente") */
-  const allSheets = useMemo(() => [...data.sheets, draft], [data.sheets, draft])
-  const due = useMemo(
-    () => dueReminders(draft.reminder ? allSheets : data.sheets, data.folders),
-    [allSheets, data, draft.reminder],
-  )
+  // La vecchia "bozza" (/scheda/bozza) non esiste più: le schede senza bambino sono generiche, sul server
+  useEffect(() => {
+    if (route.name === 'scheda' && !route.id) navigate({ name: 'oggi' }, { replace: true })
+  }, [route, navigate])
+
+  /** Tutte le schede, anche quelle senza bambino */
+  const allSheets = data.sheets
+  const due = useMemo(() => dueReminders(data.sheets, data.folders), [data])
   const backupDue = store.isBackupDue(data, lastBackup)
   const todoCount = due.length + (backupDue ? 1 : 0)
 
   const updateEditing = useCallback(
     (patch: Partial<Sheet>) => {
-      if (editingId) setData((d) => store.updateSheet(d, editingId, patch))
-      else setDraft((s) => ({ ...s, ...patch, updatedAt: Date.now() }))
+      if (!editingId) return
+      setData((d) => {
+        const sheet = d.sheets.find((s) => s.id === editingId)
+        // Il nome sulle schede è del bambino: cambiandolo qui cambia in tutte le sue schede
+        if (sheet?.folderId && patch.childName !== undefined) return store.setChildName(d, sheet.folderId, editingId, patch)
+        return store.updateSheet(d, editingId, patch)
+      })
     },
-    [editingId],
+    [editingId, setData],
   )
 
   /** Apre una scheda nell'editor e la segna come aperta di recente. */
   function openSheet(id: string) {
     const now = Date.now()
-    if (id === draft.id) {
-      setDraft((s) => ({ ...s, openedAt: now }))
-      navigate({ name: 'scheda', id: null })
-    } else {
-      setData((d) => ({ ...d, sheets: d.sheets.map((s) => (s.id === id ? { ...s, openedAt: now } : s)) }))
-      navigate({ name: 'scheda', id })
-    }
+    setData((d) => ({ ...d, sheets: d.sheets.map((s) => (s.id === id ? { ...s, openedAt: now } : s)) }))
+    navigate({ name: 'scheda', id })
   }
 
   /** La scheda su cui si sta lavorando: l'ultima aperta (per "aggiungi dalla libreria"). */
-  const lastOpened = allSheets.filter((s) => s.openedAt).sort((a, b) => b.openedAt! - a.openedAt!)[0] ?? draft
+  const lastOpened: Sheet | undefined = allSheets.filter((s) => s.openedAt).sort((a, b) => b.openedAt! - a.openedAt!)[0]
 
   function placeScene(target: Sheet, index: number, scene: Scene, update: (patch: Partial<Sheet>) => void) {
     update({ cells: target.cells.map((c, i) => (i === index ? { ...c, code: scene.code, text: null } : c)) })
@@ -124,15 +178,16 @@ export default function App({ session }: { session: Session }) {
   /** Dalla Libreria: la vignetta va nel primo riquadro vuoto dell'ultima scheda aperta. */
   function addToLastSheet(scene: Scene) {
     const target = lastOpened
+    if (!target) {
+      setToast('Apri prima una scheda: la vignetta va nel suo primo riquadro vuoto.')
+      return
+    }
     const index = target.cells.findIndex((c) => !c.code)
     if (index === -1) {
       setToast(`“${target.title || 'Scheda'}” è piena: svuota un riquadro per aggiungere altre vignette.`)
       return
     }
-    const update = (patch: Partial<Sheet>) =>
-      target.id === draft.id
-        ? setDraft((s) => ({ ...s, ...patch, updatedAt: Date.now() }))
-        : setData((d) => store.updateSheet(d, target.id, patch))
+    const update = (patch: Partial<Sheet>) => setData((d) => store.updateSheet(d, target.id, patch))
     placeScene(target, index, scene, update)
     setToast(`Aggiunta a “${target.title || 'Scheda'}”, riquadro ${index + 1}`)
   }
@@ -148,10 +203,8 @@ export default function App({ session }: { session: Session }) {
     const { data: d, folderId } = resolveFolder(data, choice)
     const name = d.folders.find((f) => f.id === folderId)?.name ?? ''
     if (action.mode === 'save') {
-      const savedSheet = store.withFolderName(d, { ...draft, folderId, updatedAt: Date.now() }, null)
-      setData(store.upsertSheet(d, savedSheet))
-      setDraft(createSheet())
-      navigate({ name: 'scheda', id: savedSheet.id }, { replace: true })
+      if (!editingId) return
+      setData(store.moveSheet(d, editingId, folderId))
       setToast(`Scheda salvata in “${name}”`)
     } else if (action.mode === 'duplicate') {
       setData(store.duplicateSheet(d, action.sheetId, folderId).data)
@@ -163,7 +216,7 @@ export default function App({ session }: { session: Session }) {
     setFolderAction(null)
   }
 
-  /** Crea: nuova scheda in una cartella (anche nuova) o come bozza, poi apre l'editor. */
+  /** Crea: nuova scheda in una cartella (anche nuova) o senza bambino, poi apre l'editor. */
   function createNewSheet(template: TemplateId, choice: CreateChoice) {
     placeNewSheet(choice, (childName) => ({ ...createSheet(template, childName), uppercase: settings.uppercaseDefault }))
   }
@@ -176,15 +229,15 @@ export default function App({ session }: { session: Session }) {
   function placeNewSheet(choice: CreateChoice, make: (childName: string) => Sheet) {
     const now = Date.now()
     if ('draft' in choice) {
-      const draftHasWork = draft.cells.some((c) => c.code) || draft.notes.trim() !== ''
-      if (draftHasWork && !confirm('C’è una bozza non salvata: verrà sostituita da quella nuova. Continuare?')) return
-      setDraft({ ...make(''), openedAt: now })
-      navigate({ name: 'scheda', id: null }, { replace: true })
+      // Senza bambino: scheda generica, salvata sul server come le altre
+      const created = { ...make(''), folderId: null, openedAt: now }
+      setData((d) => store.upsertSheet(d, created))
+      navigate({ name: 'scheda', id: created.id }, { replace: true })
       return
     }
     const { data: d, folderId } = resolveFolder(data, choice)
     const folder = d.folders.find((f) => f.id === folderId)!
-    const created = { ...make(folder.name), folderId, openedAt: now }
+    const created = { ...make(store.folderChildName(folder)), folderId, openedAt: now }
     setData(store.upsertSheet(d, created))
     navigate({ name: 'scheda', id: created.id }, { replace: true })
   }
@@ -195,12 +248,10 @@ export default function App({ session }: { session: Session }) {
   }
 
   function markReminderDone(id: string) {
-    if (id === draft.id) setDraft((s) => ({ ...s, reminder: s.reminder && { ...s.reminder, done: true } }))
-    else
-      setData((d) => {
-        const r = d.sheets.find((s) => s.id === id)?.reminder
-        return r ? store.updateSheet(d, id, { reminder: { ...r, done: true } }) : d
-      })
+    setData((d) => {
+      const r = d.sheets.find((s) => s.id === id)?.reminder
+      return r ? store.updateSheet(d, id, { reminder: { ...r, done: true } }) : d
+    })
   }
 
   function exportBackup() {
@@ -212,20 +263,11 @@ export default function App({ session }: { session: Session }) {
     setToast('Backup scaricato')
   }
 
+  /** Importa un file di backup nel centro: si aggiunge ai dati, senza doppioni (vedi importLocal.ts). */
   async function importBackup(file: File) {
     try {
-      const { data: incoming, exportedAt, settings: incomingSettings } = store.parseBackup(await file.text())
-      const when = exportedAt ? ` del ${new Date(exportedAt).toLocaleString('it-IT')}` : ''
-      const extra = incomingSettings ? ' Sostituirà anche logo, nome del centro e impostazioni.' : ''
-      const ok = confirm(
-        `Il backup${when} contiene ${incoming.folders.length} cartelle e ${incoming.sheets.length} schede.\n\n` +
-          `Sostituirà TUTTE le cartelle e le schede attuali (${data.folders.length} cartelle, ${data.sheets.length} schede).${extra} ` +
-          'Non si può annullare. Continuare?',
-      )
-      if (!ok) return
-      setData(incoming)
-      if (incomingSettings) setSettings(incomingSettings)
-      setToast('Backup importato')
+      const { data: incoming, settings: incomingSettings } = store.parseBackup(await file.text())
+      setImportSource({ kind: 'file', data: incoming, draft: null, settings: incomingSettings })
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Non è stato possibile leggere il backup.')
     }
@@ -318,6 +360,7 @@ Non si può annullare.`)) return
             backup={backupDue ? { lastExport: lastBackup } : null}
             sheets={allSheets.filter((s) => s.folderId || s.openedAt)}
             folders={data.folders}
+            localImport={localImportAvailable() ? () => setImportSource(localImportSource()) : undefined}
             onBackup={exportBackup}
             onOpen={openSheet}
             onReminderDone={markReminderDone}
@@ -329,6 +372,8 @@ Non si può annullare.`)) return
             testData={!session.account?.organization?.privacyVerifiedAt}
             folders={data.folders}
             sheets={data.sheets}
+            genericCount={data.sheets.filter((s) => !s.folderId).length}
+            onOpenGeneric={() => openFolder(GENERIC_FOLDER.id)}
             onOpenFolder={openFolder}
             onCreateFolder={(name) => {
               const { data: d, folder } = store.addFolder(data, name)
@@ -338,6 +383,26 @@ Non si può annullare.`)) return
           />
         )
       case 'cartella': {
+        if (route.id === GENERIC_FOLDER.id) {
+          return (
+            <FolderView
+              key={GENERIC_FOLDER.id}
+              folder={GENERIC_FOLDER}
+              generic
+              sheets={data.sheets.filter((s) => !s.folderId)}
+              onBack={() => back({ name: 'bambini' })}
+              onRename={() => undefined}
+              onNotes={() => undefined}
+              onDelete={() => undefined}
+              onNewSheet={() => navigate({ name: 'crea' })}
+              onOpenSheet={openSheet}
+              onStatus={(id, status) => setData((d) => store.setStatus(d, id, status))}
+              onDuplicate={(id) => setFolderAction({ mode: 'duplicate', sheetId: id })}
+              onMove={(id) => setFolderAction({ mode: 'move', sheetId: id })}
+              onDeleteSheet={(id) => setData((d) => store.deleteSheet(d, id))}
+            />
+          )
+        }
         const folder = data.folders.find((f) => f.id === route.id)
         if (!folder) return <Missing text="Questa cartella non esiste più." onBack={() => navigate({ name: 'bambini' })} />
         return (
@@ -375,7 +440,7 @@ Non si può annullare.`)) return
           <Page>
             <SectionHeader
               title="Libreria"
-              subtitle={`Tocca una vignetta per aggiungerla a “${lastOpened.title || 'Scheda'}”.`}
+              subtitle={lastOpened ? `Tocca una vignetta per aggiungerla a “${lastOpened.title || 'Scheda'}”.` : 'Apri una scheda: toccando una vignetta la aggiungi lì.'}
               onBack={backTo({ name: 'oggi' })}
               actions={
                 <Button tone="primary" onClick={() => setAiOpen(true)} className="flex items-center gap-2">
@@ -401,6 +466,9 @@ Non si può annullare.`)) return
         return (
           <SettingsView
             session={session}
+            canEditCenter={isOwner}
+            localImport={localImportAvailable() ? () => setImportSource(localImportSource()) : undefined}
+            onForgetLocal={localImportDone() && localDataPresent() ? forgetLocalData : undefined}
             settings={settings}
             onSettings={(patch) => setSettings((s) => ({ ...s, ...patch }))}
             lastBackup={lastBackup}
@@ -428,6 +496,7 @@ Non si può annullare.`)) return
       ) : route.name === 'scheda' ? (
         editing ? (
           <Editor
+            sync={sync}
             sheet={editing}
             folder={editingFolder}
             settings={settings}
@@ -452,6 +521,72 @@ Non si può annullare.`)) return
         <AppShell active={sectionOf(route) ?? 'oggi'} todoCount={todoCount} onNavigate={goSection}>
           {renderSection()}
         </AppShell>
+      )}
+
+      {editing && sync.conflicts.has(editing.id) && (
+        <Modal title="Scheda modificata altrove" size="sm">
+          <div className="flex flex-col gap-4">
+            <p className="leading-relaxed">
+              Mentre lavoravi, questa scheda è stata salvata su un altro dispositivo o da un’altra persona. Quale versione vuoi
+              tenere?
+            </p>
+            <div className="flex flex-col gap-2">
+              <Button tone="primary" onClick={() => resolveConflict(editing.id, 'mine')}>
+                Tieni la mia
+              </Button>
+              <Button onClick={() => resolveConflict(editing.id, 'theirs')}>Usa quella salvata</Button>
+              <Button
+                onClick={() => {
+                  const copyId = newId()
+                  resolveConflict(editing.id, 'copy', (mine) => ({
+                    ...mine,
+                    id: copyId,
+                    title: store.copyTitle(mine.title, mine.childName),
+                    cells: mine.cells.map((c) => ({ ...c, id: newId() })),
+                    createdAt: Date.now(),
+                    updatedAt: Date.now(),
+                    openedAt: Date.now(),
+                  }))
+                  navigate({ name: 'scheda', id: copyId }, { replace: true })
+                  setToast('La tua versione è salvata come copia')
+                }}
+              >
+                Salva la mia come copia
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {route.name !== 'scheda' && [...sync.conflicts.keys()].some((id) => data.sheets.some((s) => s.id === id)) && (
+        <div role="alert" className="fixed inset-x-0 top-0 z-[55] flex flex-wrap items-center justify-center gap-3 bg-butter px-4 py-2 text-sm font-bold">
+          Una scheda è stata modificata altrove: aprila per scegliere quale versione tenere.
+          <Button small tone="primary" onClick={() => openSheet([...sync.conflicts.keys()].find((id) => data.sheets.some((s) => s.id === id))!)}>
+            Apri
+          </Button>
+        </div>
+      )}
+
+      {route.name !== 'scheda' && (sync.state === 'waiting' || sync.state === 'error') && (
+        <div role="status" className="fixed inset-x-0 top-0 z-[54] bg-peach-soft px-4 py-2 text-center text-sm font-bold text-[#a2472f]">
+          {sync.state === 'waiting' ? 'Non salvato, riprovo… Le modifiche restano in questo browser.' : `Non salvato: ${sync.message}`}
+        </div>
+      )}
+
+      {importSource && (
+        <ImportDialog
+          source={importSource}
+          isOwner={isOwner}
+          centerSettingsEmpty={!orgSettings(session)}
+          onDone={(result) => {
+            setImportSource(null)
+            if (importSource.kind === 'browser') markLocalImported()
+            setToast(`Importati ${result.children} bambini e ${result.materials} schede`)
+            void server.reload()
+            if (result.settings) setSettings(result.settings)
+          }}
+          onClose={() => setImportSource(null)}
+        />
       )}
 
       {pickTarget !== null && editing && (
@@ -490,7 +625,7 @@ Non si può annullare.`)) return
           confirmLabel={folderAction.mode === 'save' ? 'Salva' : folderAction.mode === 'duplicate' ? 'Duplica' : 'Sposta'}
           folders={[...data.folders].sort((a, b) => a.name.localeCompare(b.name, 'it'))}
           initialFolderId={
-            folderAction.mode === 'save' ? undefined : data.sheets.find((s) => s.id === folderAction.sheetId)?.folderId
+            folderAction.mode === 'save' ? undefined : (data.sheets.find((s) => s.id === folderAction.sheetId)?.folderId ?? undefined)
           }
           onConfirm={(choice) => {
             if (!('draft' in choice)) confirmFolderAction(folderAction, choice)
@@ -536,4 +671,17 @@ function Missing({ text, onBack }: { text: string; onBack: () => void }) {
       </div>
     </Page>
   )
+}
+
+/** Impostazioni del centro salvate sul server (null se il centro non ne ha ancora) */
+function orgSettings(session: Session): AppSettings | null {
+  const raw = session.account?.organization?.settings
+  return raw && Object.keys(raw).length > 0 ? normalizeSettings(raw) : null
+}
+
+/** Dopo l'importazione: si possono togliere cartelle, schede e bozza rimaste in questo browser */
+function forgetLocalData() {
+  if (!confirm('Eliminare da questo browser le cartelle e le schede di prima? Sono già importate nel centro.')) return
+  store.clearLocalData()
+  location.reload()
 }

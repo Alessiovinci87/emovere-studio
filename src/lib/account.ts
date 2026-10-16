@@ -12,6 +12,8 @@ export interface Organization {
   privacyVerifiedAt: string | null
   role: Role
   displayName: string | null
+  /** Impostazioni dell'app per il centro (logo, nome, stampatello); {} se mai salvate */
+  settings?: Record<string, unknown>
 }
 
 export interface Account {
@@ -76,6 +78,8 @@ export const send = (method: string, body?: unknown): RequestInit => ({
 export const accountApi = {
   me: () => call<Account>('/api/me'),
   setup: (name: string, displayName: string) => call<{ organizationId: string }>('/api/setup', send('POST', { name, displayName })),
+  saveSettings: (settings: { logo: string | null; centerName: string; uppercaseDefault: boolean }) =>
+    call<{ settings: Record<string, unknown> }>('/api/organization', send('PATCH', { settings })),
   setPrivacyVerified: (privacyVerified: boolean) =>
     call<{ privacyVerifiedAt: string | null }>('/api/organization', send('PATCH', { privacyVerified })),
   members: async () => (await call<{ members: Member[] }>('/api/members')).members,

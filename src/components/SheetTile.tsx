@@ -17,7 +17,7 @@ export function SheetTile({ sheet, folder, onOpen }: { sheet: Sheet; folder: Fol
       <span className="flex min-w-0 flex-col gap-1">
         <span className="truncate font-bold">{sheet.title || 'Senza titolo'}</span>
         <span className="truncate text-sm text-muted">
-          {folder ? `📁 ${folder.name}` : 'Bozza non salvata'} · {templates[sheet.template].label}
+          {folder ? `📁 ${folder.name}` : 'Senza bambino'} · {templates[sheet.template].label}
         </span>
         <span className="inline-flex items-center gap-1.5 self-start rounded-full px-2.5 py-0.5 text-xs font-bold" style={{ backgroundColor: status.soft }}>
           <span className="h-2 w-2 rounded-full" style={{ backgroundColor: status.color }} />

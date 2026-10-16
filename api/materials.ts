@@ -3,7 +3,7 @@
 //   GET ?child={id} | ?generic=1 | ?trash=1     → { materials } filtrati
 //   GET ?id=                     → { material (con notes), versions }  (lettura registrata se è di un bambino)
 //   GET ?id=&version={n}         → { version }  copia fissa
-//   POST   { childId?, kind?, title, content, … }      → { material, existing? }  (legacyId: importazione)
+//   POST   { id?, childId?, kind?, title, content, … } → { material, existing? }  (legacyId: importazione; id generato dall'app)
 //   POST ?action=duplicate { id, childId? }             → { material }  copia che riparte da "Da fare"
 //   POST ?action=version   { id, reason }               → { versionNo }  ('export' | 'manuale')
 //   PATCH  { id, baseRevision?, title?, content?, status?, notes?, reminder?, opened?, childId?, goalIds?, trashed? }
@@ -112,7 +112,7 @@ export function GET(request: Request): Promise<Response> {
             select ${tx.unsafe(COLUMNS)} from app.materials m
             where m.org_id = ${orgId} and ${filter}
             order by m.updated_at desc`
-          return { materials: rows.map((row) => materialOut(row, s, false)) }
+          return { materials: rows.map((row) => materialOut(row, s, true)) }
         }
 
         const row = await load(tx, orgId, uuid(id))
@@ -167,11 +167,12 @@ export function POST(request: Request): Promise<Response> {
     const isGeneric = childId === null ? true : (optBool(body, 'isGeneric') ?? false)
     const fromTemplateId = 'fromTemplateId' in body && body.fromTemplateId !== null ? uuid(body.fromTemplateId) : null
     const legacyId = optText(body, 'legacyId', 100, 'Identificativo')
+    const givenId = 'id' in body ? uuid(body.id) : null
 
     return json(
       await asUser(user.id, async (tx) => {
         const { orgId, s } = await context(tx, user.id)
-        const id = randomUUID()
+        const id = givenId ?? randomUUID()
         const [inserted] = await tx<{ id: string }[]>`
           insert into app.materials (id, org_id, child_id, is_generic, kind, title, status, content, notes_enc,
                                      reminder_date, reminder_kind, reminder_done, from_template_id, legacy_id)
@@ -245,7 +246,8 @@ export function PATCH(request: Request): Promise<Response> {
         opened_at: opened ? new Date() : undefined,
         deleted_at: trashed === undefined ? undefined : trashed ? new Date() : null,
         child_id: moving ? childId : undefined,
-        is_generic: moving && childId === null ? true : undefined,
+        // Spostata in un bambino diventa personalizzata; tolta dal bambino diventa generica
+        is_generic: moving ? childId === null : undefined,
       })
       if (Object.keys(updates).length > 0) {
         await tx`update app.materials set ${tx(updates)} where id = ${id}`

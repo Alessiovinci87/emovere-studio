@@ -69,11 +69,28 @@ function handleEmailLink(client: NonNullable<typeof supabase>): Promise<string |
   return emailLink
 }
 
+/** Server di prova locale (npm run dev:server): login simulato, si chiede subito /api/me */
+const devApi = !supabase && import.meta.env.VITE_DEV_API === '1'
+
+async function accountStep(): Promise<AuthStep> {
+  try {
+    const account = await accountApi.me()
+    if (account.organization) return { step: 'ready', account }
+    if (account.setupAvailable) return { step: 'setup', email: account.user.email }
+    return { step: 'no-center', email: account.user.email }
+  } catch (err) {
+    return { step: 'error', message: (err as Error).message }
+  }
+}
+
 export function useAuth() {
-  const [state, setState] = useState<AuthStep>(supabase ? { step: 'loading' } : { step: 'off' })
+  const [state, setState] = useState<AuthStep>(supabase || devApi ? { step: 'loading' } : { step: 'off' })
 
   const evaluate = useCallback(async () => {
-    if (!supabase) return
+    if (!supabase) {
+      if (devApi) setState(await accountStep())
+      return
+    }
     const { data } = await supabase.auth.getSession()
     if (!data.session) {
       setState({ step: 'login' })
@@ -97,18 +114,14 @@ export function useAuth() {
       setState({ step: 'mfa-enroll' })
       return
     }
-    try {
-      const account = await accountApi.me()
-      if (account.organization) setState({ step: 'ready', account })
-      else if (account.setupAvailable) setState({ step: 'setup', email: account.user.email })
-      else setState({ step: 'no-center', email: account.user.email })
-    } catch (err) {
-      setState({ step: 'error', message: (err as Error).message })
-    }
+    setState(await accountStep())
   }, [])
 
   useEffect(() => {
-    if (!supabase) return
+    if (!supabase) {
+      if (devApi) void evaluate()
+      return
+    }
     const client = supabase
     let cancelled = false
 

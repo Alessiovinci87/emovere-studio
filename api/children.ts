@@ -1,7 +1,7 @@
 // /api/children — bambini, nome reale, profilo e obiettivi. I campi sensibili sono cifrati (vedi keys.ts).
 //   GET                         → { children }  (con contatori dei materiali per stato; ?trash=1 → cestino)
 //   GET ?id=                    → { child, profile, goals }  (lettura registrata in audit_log)
-//   POST   { pseudonym, … }     → { child, existing? }  (legacyId: importazione senza doppioni)
+//   POST   { pseudonym, … }     → { child, existing? }  (legacyId: importazione senza doppioni; id facoltativo, generato dall'app)
 //   PATCH  { id, … }            → { child }  (trashed: cestino/ripristino; realName solo titolare)
 //   DELETE ?id=                 → eliminazione definitiva (solo titolare)
 //   ?resource=profile  POST { childId, section, text, source, recordedOn? } · PATCH { id, … archived? } · DELETE ?id=
@@ -36,6 +36,7 @@ interface ChildRow {
   birth_year: number | null
   development_level_enc: string | null
   material_name_enc: string | null
+  notes_enc: string | null
   graphic_prefs: Record<string, unknown>
   status: string
   created_at: Date
@@ -69,7 +70,7 @@ interface GoalRow {
   updated_at: Date
 }
 
-const CHILD_COLUMNS = 'id, code, pseudonym, birth_year, development_level_enc, material_name_enc, graphic_prefs, status, created_at, updated_at, deleted_at'
+const CHILD_COLUMNS = 'id, code, pseudonym, birth_year, development_level_enc, material_name_enc, notes_enc, graphic_prefs, status, created_at, updated_at, deleted_at'
 const ENTRY_COLUMNS = 'id, child_id, section, text_enc, source, recorded_on::text, author_id, archived_at, created_at, updated_at'
 const GOAL_COLUMNS = 'id, child_id, title_enc, description_enc, area, status, started_on::text, closed_on::text, created_at, updated_at'
 
@@ -81,6 +82,7 @@ function childOut(row: ChildRow, s: Sealer, extra: { realName?: string | null; c
     birthYear: row.birth_year,
     developmentLevel: s.open(row.development_level_enc, 'children', 'development_level_enc', row.id),
     materialName: s.open(row.material_name_enc, 'children', 'material_name_enc', row.id),
+    notes: s.open(row.notes_enc, 'children', 'notes_enc', row.id) ?? '',
     graphicPrefs: row.graphic_prefs,
     status: row.status,
     createdAt: row.created_at,
@@ -208,20 +210,23 @@ export function POST(request: Request): Promise<Response> {
     const birthYear = optBirthYear(body)
     const developmentLevel = optText(body, 'developmentLevel', 2000, 'Livello di sviluppo')
     const materialName = optText(body, 'materialName', 40, 'Nome sui materiali')
+    const notes = optText(body, 'notes', 4000, 'Gli appunti')
     const realName = optText(body, 'realName', 120, 'Nome reale')
     const graphicPrefs = optPrefs(body)
     const legacyId = optText(body, 'legacyId', 100, 'Identificativo')
+    const givenId = 'id' in body ? uuid(body.id) : null
 
     return json(
       await asUser(user.id, async (tx) => {
         const { orgId, role, s } = await context(tx, user.id)
         if (realName && role !== 'titolare') throw new UserError('Il nome reale lo inserisce solo il titolare.', 403)
-        const id = randomUUID()
+        const id = givenId ?? randomUUID()
         const [row] = await tx<ChildRow[]>`
-          insert into app.children (id, org_id, pseudonym, birth_year, development_level_enc, material_name_enc, graphic_prefs, legacy_id)
+          insert into app.children (id, org_id, pseudonym, birth_year, development_level_enc, material_name_enc, notes_enc, graphic_prefs, legacy_id)
           values (${id}, ${orgId}, ${pseudonym}, ${birthYear ?? null},
                   ${s.seal(developmentLevel, 'children', 'development_level_enc', id) ?? null},
                   ${s.seal(materialName, 'children', 'material_name_enc', id) ?? null},
+                  ${s.seal(notes, 'children', 'notes_enc', id) ?? null},
                   ${tx.json((graphicPrefs ?? {}) as never)}, ${legacyId ?? null})
           on conflict (org_id, legacy_id) do nothing
           returning ${tx.unsafe(CHILD_COLUMNS)}`
@@ -258,6 +263,7 @@ export function PATCH(request: Request): Promise<Response> {
     const birthYear = optBirthYear(body)
     const developmentLevel = optText(body, 'developmentLevel', 2000, 'Livello di sviluppo')
     const materialName = optText(body, 'materialName', 40, 'Nome sui materiali')
+    const notes = optText(body, 'notes', 4000, 'Gli appunti')
     const realName = optText(body, 'realName', 120, 'Nome reale')
     const graphicPrefs = optPrefs(body)
     const status = optOneOf(body, 'status', CHILD_STATUSES)
@@ -272,6 +278,7 @@ export function PATCH(request: Request): Promise<Response> {
           birth_year: birthYear,
           development_level_enc: s.seal(developmentLevel, 'children', 'development_level_enc', id),
           material_name_enc: s.seal(materialName, 'children', 'material_name_enc', id),
+          notes_enc: s.seal(notes, 'children', 'notes_enc', id),
           graphic_prefs: graphicPrefs === undefined ? undefined : tx.json(graphicPrefs as never),
           status,
           deleted_at: trashed === undefined ? undefined : trashed ? new Date() : null,

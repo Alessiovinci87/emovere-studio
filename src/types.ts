@@ -134,9 +134,13 @@ export interface Sheet {
 /** Cartella di un bambino */
 export interface Folder {
   id: string
-  /** Solo nome o iniziali */
+  /** Solo nome o iniziali (sul server: lo pseudonimo del bambino) */
   name: string
   notes: string
+  /** Sul server: nome stampato sulle schede (cifrato), vuoto = nessun nome. Assente nei dati del browser. */
+  materialName?: string
+  /** Sul server: codice interno del bambino (B-0001) */
+  code?: string
   createdAt: number
   updatedAt: number
 }

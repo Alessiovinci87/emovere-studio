@@ -2,7 +2,8 @@ import type { Folder, Sheet, SheetStatus, StoreData } from '../types'
 import { normalizeSettings, type AppSettings } from './settings'
 import { createSheet, newId, normalizeSheet, retitleForName } from './sheet'
 
-// Tutto resta nel browser (localStorage) per il prototipo.
+// Operazioni pure su cartelle e schede. I dati stanno sul server (sync.ts); loadData/loadDraft leggono
+// quelli rimasti nel browser dalla versione precedente, solo per importarli (importLocal.ts).
 const DATA_KEY = 'emovere.data.v1'
 const DRAFT_KEY = 'emovere.draft.v1'
 
@@ -112,7 +113,7 @@ export function duplicateSheet(data: StoreData, id: string, folderId: string): {
   }
   copy.cells = copy.cells.map((c) => ({ ...c, id: newId() }))
   copy = withFolderName(data, copy, source.folderId)
-  if (folderId === source.folderId) copy.title = `${copy.title} (copia)`
+  if (folderId === source.folderId) copy.title = copyTitle(copy.title, copy.childName)
   return { data: upsertSheet(data, copy), sheet: copy }
 }
 
@@ -131,8 +132,50 @@ export function withFolderName(data: StoreData, sheet: Sheet, previousFolderId: 
   if (!folder) return sheet
   const previous = data.folders.find((f) => f.id === previousFolderId)
   const current = sheet.childName.trim()
-  if (current && current !== previous?.name) return sheet
-  return { ...sheet, childName: folder.name, title: retitleForName(sheet.title, current, folder.name) }
+  if (current && previous && current !== folderChildName(previous)) return sheet
+  const name = folderChildName(folder)
+  return { ...sheet, childName: name, title: retitleForName(sheet.title, current, name) }
+}
+
+/**
+ * Titolo di una copia: "(copia)" va prima del nome del bambino ("La mattina (copia) di Sofia"),
+ * così il nome resta in fondo e non si salva nel titolo (vedi sheetToServer).
+ */
+export function copyTitle(title: string, childName: string): string {
+  const suffix = ` di ${childName.trim()}`
+  return childName.trim() && title.endsWith(suffix) ? `${title.slice(0, -suffix.length)} (copia)${suffix}` : `${title} (copia)`
+}
+
+/** Nome da mettere nelle schede di una cartella: sul server il "nome sulle schede" del bambino, altrimenti il nome della cartella */
+export function folderChildName(folder: Folder): string {
+  return folder.materialName !== undefined ? folder.materialName : folder.name
+}
+
+/**
+ * Nome sulle schede cambiato da una scheda: vale per il bambino e quindi per tutte le sue schede
+ * (titoli compresi, se contenevano il nome).
+ */
+export function setChildName(data: StoreData, folderId: string, sheetId: string, patch: Partial<Sheet>): StoreData {
+  const name = (patch.childName ?? '').trim()
+  const now = Date.now()
+  return {
+    folders: data.folders.map((f) => (f.id === folderId ? { ...f, materialName: name, updatedAt: now } : f)),
+    sheets: data.sheets.map((s) => {
+      if (s.id === sheetId) return { ...s, ...patch, updatedAt: now }
+      if (s.folderId !== folderId) return s
+      return { ...s, childName: name, title: retitleForName(s.title, s.childName.trim(), name), updatedAt: now }
+    }),
+  }
+}
+
+/** Dopo l'importazione nel centro: si tolgono dal browser cartelle, schede e bozza della versione precedente */
+export function clearLocalData() {
+  try {
+    localStorage.removeItem(DATA_KEY)
+    localStorage.removeItem(DRAFT_KEY)
+  } catch {
+    // niente da fare
+  }
 }
 
 export function countByStatus(sheets: Sheet[]): Record<SheetStatus, number> {

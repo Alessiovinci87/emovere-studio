@@ -7,6 +7,12 @@ import { readLogo, type AppSettings } from '../lib/settings'
 
 interface Props {
   session: Session
+  /** Logo e nome del centro valgono per tutti: li cambia il titolare */
+  canEditCenter: boolean
+  /** Cartelle e schede della versione precedente ancora in questo browser */
+  localImport?: () => void
+  /** Dopo l'importazione: togliere dal browser i dati della versione precedente */
+  onForgetLocal?: () => void
   settings: AppSettings
   onSettings: (patch: Partial<AppSettings>) => void
   lastBackup: string | null
@@ -16,7 +22,7 @@ interface Props {
   onImport: (file: File) => void
 }
 
-export function SettingsView({ session, settings, onSettings, lastBackup, folders, sheets, onExport, onImport }: Props) {
+export function SettingsView({ session, canEditCenter, localImport, onForgetLocal, settings, onSettings, lastBackup, folders, sheets, onExport, onImport }: Props) {
   const backupInput = useRef<HTMLInputElement>(null)
   const logoInput = useRef<HTMLInputElement>(null)
   const [logoError, setLogoError] = useState<string | null>(null)
@@ -36,6 +42,8 @@ export function SettingsView({ session, settings, onSettings, lastBackup, folder
           </>
         )}
         <Card title="Centro">
+          {!canEditCenter && <p className="text-sm font-bold text-muted">Logo e nome del centro valgono per tutti: li cambia il titolare.</p>}
+          <fieldset disabled={!canEditCenter} className="flex min-w-0 flex-col gap-4 disabled:opacity-70">
           <p className="leading-relaxed text-muted">
             Logo e nome compaiono in un piè di pagina sottile nei PDF (si può spegnere scheda per scheda con “Mostra logo”).
           </p>
@@ -87,6 +95,7 @@ export function SettingsView({ session, settings, onSettings, lastBackup, folder
               className={inputClass}
             />
           </label>
+          </fieldset>
         </Card>
 
         <Card title="Nuove schede">
@@ -106,9 +115,9 @@ export function SettingsView({ session, settings, onSettings, lastBackup, folder
 
         <Card title="Backup">
           <p className="leading-relaxed text-muted">
-            Cartelle e schede restano solo in questo browser ({folders} {folders === 1 ? 'cartella' : 'cartelle'},{' '}
-            {sheets} {sheets === 1 ? 'scheda' : 'schede'}). Scarica un backup ogni settimana: serve per non perderle e
-            per spostarle su un altro computer. Il backup contiene anche logo, nome del centro e impostazioni.
+            Cartelle e schede sono salvate nel centro ({folders} {folders === 1 ? 'cartella' : 'cartelle'},{' '}
+            {sheets} {sheets === 1 ? 'scheda' : 'schede'}) e si ritrovano su ogni dispositivo dopo l’accesso. “Esporta
+            tutto” scarica comunque una copia, con logo, nome del centro e impostazioni.
           </p>
           <p className="font-bold">
             Ultimo backup:{' '}
@@ -133,8 +142,30 @@ export function SettingsView({ session, settings, onSettings, lastBackup, folder
               }}
             />
           </div>
-          <p className="text-sm text-muted">Importare un backup sostituisce tutte le cartelle e le schede attuali (con conferma).</p>
+          <p className="text-sm text-muted">Importare un backup aggiunge cartelle e schede al centro, senza doppioni: non cancella niente.</p>
         </Card>
+
+        {(localImport || onForgetLocal) && (
+          <Card title="Versione precedente">
+            {localImport ? (
+              <>
+                <p className="leading-relaxed text-muted">In questo browser ci sono cartelle e schede salvate prima del login.</p>
+                <Button tone="primary" onClick={localImport} className="self-start">
+                  Importale nel centro
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="leading-relaxed text-muted">
+                  Cartelle e schede di prima sono già importate nel centro, ma una copia è ancora in questo browser.
+                </p>
+                <Button tone="danger" onClick={onForgetLocal} className="self-start">
+                  Elimina la copia da questo browser
+                </Button>
+              </>
+            )}
+          </Card>
+        )}
 
         <Card title="Privacy">
           <p className="leading-relaxed text-muted">🔒 {PRIVACY_TEXT}</p>

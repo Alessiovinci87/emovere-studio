@@ -62,6 +62,7 @@ export const materialsApi = {
     content: Record<string, unknown>
     status?: ServerMaterial['status']
     notes?: string
+    reminder?: { date: string; kind: string; done: boolean } | null
     legacyId?: string
   }) => (await call<{ material: ServerMaterial; existing?: boolean }>('/api/materials', send('POST', body))),
   /** Titolo e contenuto con la revisione di partenza: può rispondere con un conflitto */

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Page, SectionHeader } from '../components/AppShell'
+import { Button } from '../components/ui'
 import { SheetTile } from '../components/SheetTile'
 import { TodoList } from '../components/TodoPanel'
 import type { DueItem } from '../lib/reminders'
@@ -14,10 +15,12 @@ interface Props {
   onBackup: () => void
   onOpen: (sheetId: string) => void
   onReminderDone: (sheetId: string) => void
+  /** Cartelle e schede della versione precedente ancora nel browser: invito a importarle */
+  localImport?: () => void
 }
 
 /** Schermata iniziale: cosa c'è da fare, cosa è in lavorazione, cosa si è aperto di recente. */
-export function TodayView({ due, backup, sheets, folders, onBackup, onOpen, onReminderDone }: Props) {
+export function TodayView({ due, backup, sheets, folders, onBackup, onOpen, onReminderDone, localImport }: Props) {
   const folderOf = (s: Sheet) => folders.find((f) => f.id === s.folderId)
   const inProgress = sheets.filter((s) => s.status === 'in-lavorazione').sort((a, b) => b.updatedAt - a.updatedAt)
   const recent = sheets
@@ -30,6 +33,17 @@ export function TodayView({ due, backup, sheets, folders, onBackup, onOpen, onRe
     <Page>
       <SectionHeader title="Oggi" subtitle={today.charAt(0).toUpperCase() + today.slice(1)} />
       <div className="flex flex-col gap-10">
+        {localImport && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl bg-butter p-5">
+            <p className="leading-relaxed">
+              <strong>In questo browser ci sono cartelle e schede della versione precedente.</strong> Importale nel centro per
+              ritrovarle su tutti i dispositivi.
+            </p>
+            <Button tone="primary" onClick={localImport}>
+              Importa
+            </Button>
+          </div>
+        )}
         <Block title="Da fare">
           <TodoList items={due} backup={backup} onBackup={onBackup} onOpen={onOpen} onDone={onReminderDone} />
         </Block>

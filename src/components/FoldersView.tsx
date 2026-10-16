@@ -11,12 +11,15 @@ interface Props {
   testData: boolean
   folders: Folder[]
   sheets: Sheet[]
+  /** Schede senza bambino (generiche) */
+  genericCount: number
+  onOpenGeneric: () => void
   onOpenFolder: (id: string) => void
   onCreateFolder: (name: string) => void
 }
 
 /** Schermata principale: le cartelle dei bambini con i contatori per stato. */
-export function FoldersView({ testData, folders, sheets, onOpenFolder, onCreateFolder }: Props) {
+export function FoldersView({ testData, folders, sheets, genericCount, onOpenGeneric, onOpenFolder, onCreateFolder }: Props) {
   const [creating, setCreating] = useState(false)
   const sorted = [...folders].sort((a, b) => a.name.localeCompare(b.name, 'it'))
 
@@ -24,7 +27,7 @@ export function FoldersView({ testData, folders, sheets, onOpenFolder, onCreateF
     <Page>
       <SectionHeader
         title="Bambini"
-        subtitle="Una cartella per ogni bambino, con le sue schede."
+        subtitle="Una cartella per ogni bambino (con il suo pseudonimo), con le sue schede."
         actions={
           <Button tone="primary" onClick={() => setCreating(true)}>
             + Nuova cartella
@@ -60,6 +63,18 @@ export function FoldersView({ testData, folders, sheets, onOpenFolder, onCreateF
             )
           })}
         </ul>
+      )}
+
+      {genericCount > 0 && (
+        <button
+          onClick={onOpenGeneric}
+          className="mt-6 flex w-full items-center justify-between gap-3 rounded-3xl border border-dashed border-line bg-white/60 px-6 py-4 text-left transition hover:bg-white"
+        >
+          <span className="font-bold">Schede senza bambino</span>
+          <span className="text-sm text-muted">
+            {genericCount} {genericCount === 1 ? 'scheda' : 'schede'}
+          </span>
+        </button>
       )}
 
       {creating && (
@@ -101,7 +116,7 @@ export function FolderNameDialog({
           if (name.trim()) onConfirm(name.trim())
         }}
       >
-        <NameInput label="Nome del bambino" value={name} onChange={setName} autoFocus />
+        <NameInput label="Pseudonimo del bambino" placeholder="Pseudonimo o iniziali" value={name} onChange={setName} autoFocus />
         <div className="flex justify-end gap-2">
           <Button type="button" onClick={onClose}>
             Annulla

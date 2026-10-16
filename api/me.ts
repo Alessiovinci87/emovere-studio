@@ -18,9 +18,10 @@ export function GET(request: Request): Promise<Response> {
             privacy_verified_at: Date | null
             role: 'titolare' | 'operatore'
             display_name: string | null
+            settings: Record<string, unknown>
           }[]
         >`
-          select o.id, o.name, o.data_controller, o.privacy_verified_at, m.role, m.display_name
+          select o.id, o.name, o.data_controller, o.privacy_verified_at, o.settings, m.role, m.display_name
           from app.memberships m join app.organizations o on o.id = m.org_id
           where m.user_id = ${user.id}
           order by m.created_at
@@ -36,6 +37,7 @@ export function GET(request: Request): Promise<Response> {
                 privacyVerifiedAt: org.privacy_verified_at?.toISOString() ?? null,
                 role: org.role,
                 displayName: org.display_name,
+                settings: org.settings,
               }
             : null,
           setupAvailable: available,
