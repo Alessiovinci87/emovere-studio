@@ -79,8 +79,9 @@ export function CreateView({ folders, folderId, onBack, onCreate, onCreatePreset
         </ul>
       </section>
       <p className="mt-8 text-sm text-muted">
-        Su ogni modello puoi aggiungere il cerchietto per la stellina “fatto”, lo stampatello maiuscolo, la versione da
-        colorare e le carte da ritagliare.
+        Su ogni modello puoi scegliere immagini e testo, solo immagini o solo testo, togliere i numeri, aggiungere il
+        cerchietto per la stellina “fatto”, lo stampatello maiuscolo, la versione da colorare e le carte da ritagliare. Le
+        sequenze si esportano anche in versione da riordinare.
       </p>
 
       {chosen?.kind === 'template' && (
@@ -130,6 +131,21 @@ function TemplatePreview({ template, codes }: { template: Template; codes?: stri
   const rows = agenda ? 3 : template.rows
   const count = cols * rows
   const samples = codes ?? catalog.scenes.slice(0, count).map((s) => s.code)
+  if (template.layout === 'checklist') {
+    // Righe: vignetta piccola, frase, casella
+    return (
+      <span className="flex h-[124px] w-[88px] shrink-0 flex-col gap-1 rounded-lg border border-line bg-white p-1.5 shadow-sm" aria-hidden="true">
+        <span className="mx-auto h-1.5 w-10 shrink-0 rounded-full bg-line" />
+        {Array.from({ length: 6 }, (_, i) => (
+          <span key={i} className="flex min-h-0 flex-1 items-center gap-1 rounded-[3px] border px-0.5" style={{ borderColor: `${stepColors[i % stepColors.length]}88` }}>
+            <img src={sceneThumb(samples[i % samples.length], 'bambina')} alt="" loading="lazy" className="aspect-square h-[80%] rounded-[2px] object-cover" />
+            <span className="h-1 flex-1 rounded-full bg-line" />
+            <span className="aspect-square h-[55%] rounded-[2px] border" style={{ borderColor: stepColors[i % stepColors.length] }} />
+          </span>
+        ))}
+      </span>
+    )
+  }
   return (
     <span
       className={`flex shrink-0 flex-col gap-1 rounded-lg border border-line bg-white p-1.5 shadow-sm ${

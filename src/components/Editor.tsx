@@ -3,9 +3,9 @@ import { CARD_LABEL, cardMetrics, sheetCards, type CardSize } from './Cards'
 import type { ExportContent, ExportKind } from '../lib/exportPdf'
 import { lookFor } from '../lib/look'
 import type { AppSettings } from '../lib/settings'
-import { changeTemplate, retitleForName, templateList, templates } from '../lib/sheet'
+import { CHECKLIST_ROWS, canReorder, changeTemplate, retitleForName, templateList, templates, usesDoneCircle } from '../lib/sheet'
 import { CIRCLE, cutoutGrid } from '../lib/stars'
-import type { Folder, Sheet, TemplateId, TimeMode } from '../types'
+import type { CellShow, Folder, Sheet, TemplateId, TimeMode } from '../types'
 import { CharacterToggle } from './CharacterToggle'
 import { BackIcon, CloseIcon, DownloadIcon, FitIcon, MinusIcon, PanelIcon, PlusIcon, SlidersIcon } from './Icons'
 import { Modal } from './Modal'
@@ -60,7 +60,7 @@ export function Editor({
   /** Telefono: pannello opzioni che sale dal basso */
   const [sheetOpen, setSheetOpen] = useState(false)
   const [exporting, setExporting] = useState<ExportKind | null>(null)
-  const [cardsOpen, setCardsOpen] = useState(false)
+  const [cardsOpen, setCardsOpen] = useState<CardsMode | null>(null)
   const [askSave, setAskSave] = useState(false)
   /** Bozza per cui si è già risposto "No, grazie": non si ripropone a ogni PDF */
   const declinedFor = useRef<string | null>(null)
@@ -126,7 +126,7 @@ export function Editor({
           sheet={sheet}
           busy={exporting}
           onExport={handleExport}
-          onCards={() => setCardsOpen(true)}
+          onCards={setCardsOpen}
           onColoring={(value) => onChange({ coloring: value })}
         />
 
@@ -206,13 +206,14 @@ export function Editor({
 
       {cardsOpen && (
         <CardsDialog
+          mode={cardsOpen}
           sheet={sheet}
           busy={exporting}
           onExport={(kind, size, strip) => {
-            setCardsOpen(false)
-            void handleExport(kind, { type: 'cards', size, strip })
+            setCardsOpen(null)
+            void handleExport(kind, cardsOpen === 'reorder' ? { type: 'reorder', size } : { type: 'cards', size, strip })
           }}
-          onClose={() => setCardsOpen(false)}
+          onClose={() => setCardsOpen(null)}
         />
       )}
 
@@ -364,6 +365,54 @@ function EditorOptions({
         </div>
       )}
 
+      {template.layout === 'checklist' && (
+        <Field label="Righe">
+          <div className="flex items-center gap-2">
+            <Button
+              small
+              disabled={sheet.checklist.rows <= CHECKLIST_ROWS.min}
+              onClick={() => onChange({ checklist: { rows: sheet.checklist.rows - 1 } })}
+              aria-label="Una riga in meno"
+            >
+              −
+            </Button>
+            <span className="min-w-16 text-center font-bold">{sheet.checklist.rows}</span>
+            <Button
+              small
+              disabled={sheet.checklist.rows >= CHECKLIST_ROWS.max}
+              onClick={() => onChange({ checklist: { rows: sheet.checklist.rows + 1 } })}
+              aria-label="Una riga in più"
+            >
+              +
+            </Button>
+          </div>
+          <p className="text-xs text-muted">Da {CHECKLIST_ROWS.min} a {CHECKLIST_ROWS.max}. Le righe nascoste restano salvate.</p>
+        </Field>
+      )}
+
+      {template.layout !== 'agenda' && (
+        <Field label="Mostra">
+          <Segmented<CellShow>
+            value={sheet.sequence.show}
+            options={[
+              ['both', 'Immagini e testo'],
+              ['images', 'Solo immagini'],
+              ['text', 'Solo testo'],
+            ]}
+            onChange={(show) => onChange({ sequence: { ...sheet.sequence, show } })}
+          />
+        </Field>
+      )}
+
+      {template.numbered && (
+        <Toggle
+          label="Numeri dei passaggi"
+          hint={sheet.sequence.numbers ? undefined : 'Senza numeri l’ordine resta da sinistra a destra e dall’alto in basso.'}
+          checked={sheet.sequence.numbers}
+          onChange={(numbers) => onChange({ sequence: { ...sheet.sequence, numbers } })}
+        />
+      )}
+
       <div className="flex flex-col gap-2">
         <NameInput label="Nome del bambino (facoltativo)" value={sheet.childName} onChange={handleChildName} />
         {folder && !sheet.childName.trim() && (
@@ -383,7 +432,7 @@ function EditorOptions({
         onChange={(uppercase) => onChange({ uppercase })}
       />
 
-      {template.numbered && (
+      {template.times && (
         <Field label="Orario come">
           <Segmented<TimeMode>
             value={sheet.timeMode}
@@ -394,6 +443,9 @@ function EditorOptions({
             ]}
             onChange={(timeMode) => onChange({ timeMode })}
           />
+          {!sheet.sequence.numbers && (
+            <p className="text-xs text-muted">Senza numeri si vedono solo gli orari già scritti: per aggiungerne, riaccendi i numeri.</p>
+          )}
         </Field>
       )}
 
@@ -405,6 +457,7 @@ function EditorOptions({
         />
       )}
 
+      {template.layout !== 'checklist' && sheet.sequence.show !== 'text' && (
       <div className="flex flex-col gap-3">
         <Toggle
           label="Cerchietto per la stellina"
@@ -423,6 +476,7 @@ function EditorOptions({
           </div>
         )}
       </div>
+      )}
 
       <Toggle
         label="Versione da colorare"
@@ -498,7 +552,7 @@ function ExportMenu({
   sheet: Sheet
   busy: ExportKind | null
   onExport: (kind: ExportKind, content?: ExportContent) => void
-  onCards: () => void
+  onCards: (mode: CardsMode) => void
   onColoring: (value: boolean) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -568,8 +622,10 @@ function ExportMenu({
           <li role="separator" className="mx-3 my-1 border-t border-line/70" />
           {item('PDF stampa', 'A4 alta qualità, da plastificare', () => onExport('stampa'))}
           {item('PDF WhatsApp', 'File leggero da inviare', () => onExport('whatsapp'))}
-          {item('Carte da ritagliare…', 'Le vignette come carte singole', onCards)}
-          {sheet.doneCircle && (
+          {item('Carte da ritagliare…', 'Le vignette come carte singole', () => onCards('cards'))}
+          {canReorder(templates[sheet.template]) &&
+            item('Versione da riordinare…', 'Base vuota + vignette mescolate da ritagliare', () => onCards('reorder'))}
+          {usesDoneCircle(sheet) && (
             <>
               <li role="separator" className="mx-3 my-1 border-t border-line/70" />
               {item('Stelline · stampa', 'Solo la pagina di stelline da ritagliare', () => onExport('stampa', { type: 'stars' }))}
@@ -582,13 +638,18 @@ function ExportMenu({
   )
 }
 
+/** Carte da ritagliare, oppure versione da riordinare (base vuota + carte mescolate) */
+type CardsMode = 'cards' | 'reorder'
+
 /** Carte da ritagliare: misura, striscia agenda, stampa o WhatsApp. */
 function CardsDialog({
+  mode,
   sheet,
   busy,
   onExport,
   onClose,
 }: {
+  mode: CardsMode
   sheet: Sheet
   busy: ExportKind | null
   onExport: (kind: ExportKind, size: CardSize, strip: boolean) => void
@@ -601,15 +662,25 @@ function CardsDialog({
   const pages = Math.max(1, Math.ceil(count / m.perPage))
 
   return (
-    <Modal title="Carte da ritagliare" onClose={onClose} size="sm">
+    <Modal title={mode === 'reorder' ? 'Versione da riordinare' : 'Carte da ritagliare'} onClose={onClose} size="sm">
       <div className="flex flex-col gap-5">
         {count === 0 ? (
           <p className="text-muted">La scheda non ha ancora vignette.</p>
         ) : (
           <>
-            <p className="text-muted">
-              {count} {count === 1 ? 'carta' : 'carte'} con vignetta e frase, linee di taglio tratteggiate.
-            </p>
+            {mode === 'reorder' ? (
+              <p className="leading-relaxed text-muted">
+                Pagina 1: la scheda con i riquadri vuoti{sheet.sequence.numbers && templates[sheet.template].numbered ? ' e numerati' : ''}, la
+                base dove attaccare le carte. Poi le {count} carte <strong className="text-ink">in ordine mescolato</strong>, da
+                ritagliare e rimettere in ordine. Scegli una misura che entri nei riquadri.
+              </p>
+            ) : (
+              <p className="text-muted">
+                {count} {count === 1 ? 'carta' : 'carte'}
+                {sheet.sequence.show === 'images' ? ' con la vignetta' : sheet.sequence.show === 'text' ? ' con la frase' : ' con vignetta e frase'}, linee
+                di taglio tratteggiate.
+              </p>
+            )}
             <div role="radiogroup" aria-label="Misura" className="flex flex-col gap-2">
               {(Object.keys(CARD_LABEL) as CardSize[]).map((s) => {
                 const ms = cardMetrics(s)
@@ -629,14 +700,17 @@ function CardsDialog({
                 )
               })}
             </div>
+            {mode === 'cards' && (
             <Toggle
               label="Aggiungi striscia agenda"
               hint={`Pagina in più: ${count} caselle vuote della stessa misura e in fondo “FINITO”, per agende con velcro.`}
               checked={strip}
               onChange={setStrip}
             />
+            )}
             <p className="text-sm text-muted">
-              {pages} {pages === 1 ? 'pagina' : 'pagine'} di carte{strip ? ' + striscia agenda' : ''}
+              {mode === 'reorder' ? '1 pagina di base + ' : ''}
+              {pages} {pages === 1 ? 'pagina' : 'pagine'} di carte{strip && mode === 'cards' ? ' + striscia agenda' : ''}
               {sheet.coloring ? ' · versione da colorare' : ''}.
             </p>
           </>

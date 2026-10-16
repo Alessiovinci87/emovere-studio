@@ -15,10 +15,11 @@ import {
   rectSortingStrategy,
   rectSwappingStrategy,
   sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
 } from '@dnd-kit/sortable'
 import { Children, Fragment, useMemo, type ReactNode } from 'react'
 import type { SheetLook } from '../lib/look'
-import { WEEK_DAYS, agendaIndex, stepColors, templates, type Template } from '../lib/sheet'
+import { WEEK_DAYS, agendaIndex, stepColors, templates, usesDoneCircle, type Template } from '../lib/sheet'
 import { useTouchSelection } from '../lib/useTouchSelection'
 import type { Cell, Sheet } from '../types'
 import { PrintSheetCell, SortableSheetCell } from './SheetCell'
@@ -34,8 +35,9 @@ interface EditProps {
   onChooseSymbol: (index: number) => void
 }
 
-/** Riquadri visibili: tutti, tranne nell'Agenda (solo i giorni e i momenti scelti). */
+/** Riquadri visibili: tutti, tranne nell'Agenda (giorni e momenti scelti) e nella Checklist (righe scelte). */
 export function visibleIndexes(sheet: Sheet, template: Template = templates[sheet.template]): number[] {
+  if (template.layout === 'checklist') return sheet.cells.slice(0, sheet.checklist.rows).map((_, i) => i)
   if (template.layout !== 'agenda') return sheet.cells.map((_, i) => i)
   const out: number[] = []
   for (let r = 0; r < sheet.agenda.rows; r++) for (let d = 0; d < sheet.agenda.days; d++) out.push(agendaIndex(r, d))
@@ -136,7 +138,10 @@ export function SheetView({ sheet, look, scale, onChange, onChooseScene, onChoos
       }
       grid={(layout) => (
         <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={[unscale]} onDragEnd={handleDragEnd}>
-          <SortableContext items={visible.map((i) => sheet.cells[i].id)} strategy={agenda ? rectSwappingStrategy : rectSortingStrategy}>
+          <SortableContext
+            items={visible.map((i) => sheet.cells[i].id)}
+            strategy={agenda ? rectSwappingStrategy : template.layout === 'checklist' ? verticalListSortingStrategy : rectSortingStrategy}
+          >
             {layout(
               visible.map((i) => {
                 const cell = sheet.cells[i]
@@ -148,7 +153,7 @@ export function SheetView({ sheet, look, scale, onChange, onChooseScene, onChoos
                     index={i}
                     character={sheet.character}
                     template={template}
-                    doneCircle={sheet.doneCircle}
+                    doneCircle={usesDoneCircle(sheet)}
                     selected={selection.isSelected(cell.id)}
                     onSelect={selection.selectHandler(cell.id)}
                     onChoose={() => onChooseScene(i)}
@@ -219,7 +224,7 @@ export function PrintSheetView({ sheet, look }: { sheet: Sheet; look: SheetLook 
               index={i}
               character={sheet.character}
               template={template}
-              doneCircle={sheet.doneCircle}
+              doneCircle={usesDoneCircle(sheet)}
             />
           )),
         )
@@ -279,6 +284,17 @@ function SheetPage({ sheet, look, header, grid, rowLabel, dayAction, rememberLin
                 {i > 0 && <Arrow direction="right" />}
                 <div className="flex min-w-0 flex-1 flex-col *:flex-1">{child}</div>
               </Fragment>
+            ))}
+          </div>
+        )
+      case 'checklist':
+        // Righe una sotto l'altra, tutte della stessa altezza
+        return (
+          <div className="flex min-h-0 flex-1 flex-col gap-[2.5mm]">
+            {items.map((child, i) => (
+              <div key={i} className="flex min-h-0 flex-1 flex-col *:flex-1">
+                {child}
+              </div>
             ))}
           </div>
         )

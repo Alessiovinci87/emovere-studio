@@ -142,9 +142,13 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
 2. **Composer scheda**:
    - Template disponibili, definiti in `templates` (`src/lib/sheet.ts`) con `orientation` (verticale/orizzontale), `layout` (`grid`, `stack`, `sequence`, `agenda`) e `defaultText` (frase iniziale = titolo della scena, o vuota):
      - A4 verticale: Routine 4 (2×2, sequenze brevi), Routine 6 (2 colonne × 3 righe: in 3 × 2 le vignette verrebbero troppo piccole), Routine 9 (3×3), Routine 12 (3×4), Prima/Poi (2 riquadri uno sotto l'altro con freccia ↓), Scelte 2 e 3 (in colonna) e 4 (2×2)
-     - A4 orizzontale: Prima – Adesso – Dopo (3 riquadri affiancati con frecce, etichette PRIMA/ADESSO/DOPO, ADESSO con bordo più spesso) e Agenda della settimana (vedi sotto)
+     - A4 orizzontale: Prima – Adesso – Dopo (3 riquadri affiancati con frecce, etichette PRIMA/ADESSO/DOPO, ADESSO con bordo più spesso), Ora – Poi (2 riquadri affiancati, ORA con bordo più spesso) e Agenda della settimana (vedi sotto)
+     - Checklist (A4 verticale, layout `checklist`): righe con numero, vignetta piccola, frase e casella da spuntare; da 3 a 10 righe (`sheet.checklist.rows`), si conservano sempre 10 riquadri
      - Previsti: Storia sociale (4, 6)
    - "Ricordo sempre" solo nei modelli verticali
+   - Sequenze (`sheet.sequence`, distribuite con `SheetLook`): "Numeri dei passaggi" sì/no (modelli numerati e checklist; senza numeri la colonna a sinistra resta solo per un orario già scritto) e "Mostra": Immagini e testo, Solo immagini, Solo testo (la frase grande al posto della vignetta). Valgono a schermo, nel PDF e nelle carte. Non nell'Agenda
+   - Orario per riquadro solo nelle routine (`template.times`)
+   - Cerchietto della stellina: non nella checklist (c'è la casella) né in "Solo testo" (`usesDoneCircle`)
    - Il modello si sceglie alla creazione e si può cambiare nel composer (conferma se si perdono vignette)
    - Titolo e sottotitolo modificabili
    - Click su un riquadro vuoto → si apre la libreria → la vignetta scelta entra nel riquadro
@@ -193,6 +197,12 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
 - Misure: piccola 5 cm (12 per pagina), media 7 cm (6, default), grande 9 cm (4); oltre, il PDF continua sulle pagine successive (`src/components/Cards.tsx`)
 - "Aggiungi striscia agenda": caselle vuote della stessa misura delle carte (una per carta, numerate), in colonna, e in fondo "FINITO" più grande, per agende con velcro
 - Stampa o WhatsApp. Nome file `{titolo}_carte.pdf` (WhatsApp `{titolo}_carte_whatsapp.pdf`)
+- Rispettano "Mostra": solo vignetta, solo frase (grande, al centro della carta) o entrambe
+
+## Versione da riordinare
+- Menu Esporta → "Versione da riordinare…" per le sequenze (modelli numerati, Prima/Poi, Ora – Poi, Prima – Adesso – Dopo: `canReorder`)
+- Pagina 1: la scheda con i riquadri vuoti (restano numeri, etichette, orari) e un quadrato tratteggiato dove attaccare la carta (`SheetLook.slots`); poi le carte in ordine mescolato (`shuffled`, mai uguale all'ordine giusto), nella misura scelta
+- Nome file `{titolo}_riordino.pdf` (WhatsApp `{titolo}_riordino_whatsapp.pdf`)
 
 ## Versione da colorare
 - Interruttore per scheda (`coloring`) nell'editor e nel menu Esporta: scheda, PDF e carte usano le vignette a contorno; numeri, cornici, etichette, simboli, cerchietto, frecce e Ricordo sempre diventano in bianco e nero (risparmio di inchiostro)

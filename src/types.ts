@@ -34,6 +34,8 @@ export type TemplateId =
   | 'scelte-3'
   | 'scelte-4'
   | 'prima-adesso-dopo'
+  | 'ora-poi'
+  | 'checklist'
   | 'agenda'
 
 export type SymbolKind = 'check' | 'cross' | 'forbidden'
@@ -55,6 +57,20 @@ export interface Cell {
 }
 
 export type TimeMode = 'analog' | 'digital' | 'both'
+
+/** Cosa mostra ogni riquadro: vignetta e frase, solo vignetta, solo frase */
+export type CellShow = 'both' | 'images' | 'text'
+
+export interface SequenceOptions {
+  /** Numeri dei passaggi (modelli numerati e checklist) */
+  numbers: boolean
+  show: CellShow
+}
+
+export interface ChecklistOptions {
+  /** Righe visibili, da 3 a 10 (si conservano sempre 10 riquadri) */
+  rows: number
+}
 
 export interface AgendaOptions {
   /** 7 = Lun–Dom, 5 = solo Lun–Ven */
@@ -98,6 +114,10 @@ export interface Sheet {
   showLogo: boolean | null
   /** Versione da colorare: vignette a contorno, numeri e cornici in bianco e nero */
   coloring: boolean
+  /** Numeri e modalità immagini/testo */
+  sequence: SequenceOptions
+  /** Solo Checklist */
+  checklist: ChecklistOptions
   /** Solo Agenda della settimana */
   agenda: AgendaOptions
   /** null = scheda non ancora salvata (bozza) */

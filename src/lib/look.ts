@@ -1,14 +1,18 @@
 import { sceneImage, type ImageVariant } from './catalog'
 import type { AppSettings } from './settings'
-import type { Character, Sheet, TimeMode } from '../types'
+import type { CellShow, Character, Sheet, TimeMode } from '../types'
 
 /**
  * Aspetto della pagina, uguale a schermo e nel PDF: stampatello, orologio, piè di pagina,
- * versione da colorare. Si passa esplicitamente anche all'export (che disegna fuori dall'app).
+ * versione da colorare, numeri dei passaggi, immagini e/o testo. Si passa esplicitamente anche all'export (che disegna fuori dall'app).
  */
 export interface SheetLook {
   uppercase: boolean
   timeMode: TimeMode
+  /** Numeri dei passaggi (nei modelli che li prevedono) */
+  numbers: boolean
+  /** Vignetta e frase, solo vignetta, solo frase */
+  show: CellShow
   /** Versione da colorare: vignette a contorno, numeri, cornici e simboli in bianco e nero */
   coloring: boolean
   /** Piè di pagina con logo e nome del centro; null = niente piè di pagina */
@@ -16,6 +20,8 @@ export interface SheetLook {
   imageVariant: ImageVariant
   /** Vignette con la versione da colorare già pronta, chiavi "A01_bambina" */
   coloringKeys: ReadonlySet<string>
+  /** Base della versione da riordinare: quadrato tratteggiato nei riquadri vuoti, dove attaccare la carta */
+  slots?: boolean
 }
 
 export function coloringKey(code: string, character: Character): string {
@@ -50,6 +56,8 @@ export function lookFor(
   return {
     uppercase: sheet.uppercase,
     timeMode: sheet.timeMode,
+    numbers: sheet.sequence.numbers,
+    show: sheet.sequence.show,
     coloring: sheet.coloring,
     footer: footerFor(sheet, settings),
     imageVariant,

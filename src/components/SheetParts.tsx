@@ -5,6 +5,8 @@ import type { TimeMode } from '../types'
 const defaultLook: SheetLook = {
   uppercase: false,
   timeMode: 'both',
+  numbers: true,
+  show: 'both',
   coloring: false,
   footer: null,
   imageVariant: 'web',

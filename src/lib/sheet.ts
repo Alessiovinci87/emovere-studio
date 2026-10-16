@@ -1,4 +1,4 @@
-import type { AgendaOptions, Cell, ReminderKind, Sheet, SheetStatus, TemplateId } from '../types'
+import type { AgendaOptions, Cell, ChecklistOptions, ReminderKind, SequenceOptions, Sheet, SheetStatus, TemplateId } from '../types'
 
 export interface Template {
   id: TemplateId
@@ -10,8 +10,9 @@ export interface Template {
    * - stack: uno sotto l'altro con freccia ↓ (Prima / Poi)
    * - sequence: affiancati con freccia → (Prima – Adesso – Dopo)
    * - agenda: giorni in colonna, momenti della giornata in riga
+   * - checklist: righe con vignetta piccola, frase e casella da spuntare
    */
-  layout: 'grid' | 'stack' | 'sequence' | 'agenda'
+  layout: 'grid' | 'stack' | 'sequence' | 'agenda' | 'checklist'
   /** false = la frase sotto la vignetta parte vuota (es. Agenda); true = titolo della scena */
   defaultText: boolean
   /** Riquadro evidenziato con un bordo più spesso (ADESSO) */
@@ -20,8 +21,10 @@ export interface Template {
   group: string
   cols: number
   rows: number
-  /** Numeri dei passaggi e orari (solo routine) */
+  /** Numeri dei passaggi (routine e checklist; si possono spegnere per scheda) */
   numbered: boolean
+  /** Orario per riquadro (solo routine) */
+  times?: boolean
   /** Etichette fisse dei riquadri, es. Prima / Poi */
   cellLabels?: string[]
   /** Una riga per la galleria "Crea" */
@@ -43,6 +46,7 @@ export const templates: Record<TemplateId, Template> = {
     cols: 2,
     rows: 2,
     numbered: true,
+    times: true,
     textMm: 6.5,
     defaultTitle: 'La mia routine',
   },
@@ -58,6 +62,7 @@ export const templates: Record<TemplateId, Template> = {
     cols: 2,
     rows: 3,
     numbered: true,
+    times: true,
     textMm: 6,
     defaultTitle: 'La mia routine',
   },
@@ -72,6 +77,7 @@ export const templates: Record<TemplateId, Template> = {
     cols: 3,
     rows: 3,
     numbered: true,
+    times: true,
     textMm: 5,
     defaultTitle: 'La mia routine',
   },
@@ -86,6 +92,7 @@ export const templates: Record<TemplateId, Template> = {
     cols: 3,
     rows: 4,
     numbered: true,
+    times: true,
     textMm: 4.4,
     defaultTitle: 'La mia routine',
   },
@@ -162,6 +169,37 @@ export const templates: Record<TemplateId, Template> = {
     textMm: 7,
     defaultTitle: 'Prima, adesso, dopo',
   },
+  'ora-poi': {
+    id: 'ora-poi',
+    orientation: 'landscape',
+    layout: 'sequence',
+    defaultText: true,
+    description: 'Due vignette grandi affiancate: ora questo, poi quello.',
+    label: 'Ora – Poi',
+    group: 'Prima / Poi',
+    cols: 2,
+    rows: 1,
+    numbered: false,
+    cellLabels: ['Ora', 'Poi'],
+    highlight: 0,
+    textMm: 8,
+    defaultTitle: 'Ora e poi',
+  },
+  checklist: {
+    id: 'checklist',
+    orientation: 'portrait',
+    layout: 'checklist',
+    defaultText: true,
+    description: 'I passaggi in fila, con la casella da spuntare quando sono fatti.',
+    label: 'Checklist',
+    group: 'Sequenze',
+    // Si conservano sempre 10 righe: cambiando il numero di righe non si perde nulla
+    cols: 1,
+    rows: 10,
+    numbered: true,
+    textMm: 6,
+    defaultTitle: 'La mia checklist',
+  },
   agenda: {
     id: 'agenda',
     orientation: 'landscape',
@@ -177,6 +215,26 @@ export const templates: Record<TemplateId, Template> = {
     textMm: 3.4,
     defaultTitle: 'La mia settimana',
   },
+}
+
+/** Versione da riordinare: per le sequenze (modelli numerati, Prima/Poi, Ora – Poi, Prima – Adesso – Dopo) */
+export function canReorder(template: Template): boolean {
+  return template.numbered || template.layout === 'stack' || template.layout === 'sequence'
+}
+
+/** Cerchietto della stellina: non nella checklist (c'è la casella) né in "Solo testo" (manca la vignetta) */
+export function usesDoneCircle(sheet: Sheet): boolean {
+  return sheet.doneCircle && templates[sheet.template].layout !== 'checklist' && sheet.sequence.show !== 'text'
+}
+
+export const CHECKLIST_ROWS = { min: 3, max: 10, default: 6 }
+
+export function defaultSequence(): SequenceOptions {
+  return { numbers: true, show: 'both' }
+}
+
+export function defaultChecklist(): ChecklistOptions {
+  return { rows: CHECKLIST_ROWS.default }
 }
 
 export const WEEK_DAYS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
@@ -243,6 +301,8 @@ export function createSheet(template: TemplateId = 'routine-12', childName = '')
     timeMode: 'both',
     showLogo: null,
     coloring: false,
+    sequence: defaultSequence(),
+    checklist: defaultChecklist(),
     agenda: defaultAgenda(),
     folderId: null,
     status: 'da-fare',
@@ -260,6 +320,8 @@ export function normalizeSheet(raw: Partial<Sheet>): Sheet {
   const sheet = { ...base, ...raw, template: base.template } as Sheet
   sheet.cells = (raw.cells ?? base.cells).map((c) => ({ ...emptyCell(), ...c }))
   sheet.agenda = { ...defaultAgenda(), ...raw.agenda }
+  sheet.sequence = { ...defaultSequence(), ...raw.sequence }
+  sheet.checklist = { ...defaultChecklist(), ...raw.checklist }
   // Modello non più disponibile (es. la vecchia "Tabella a gettoni"): diventa Routine 12, vignette comprese
   if (!known) Object.assign(sheet, changeTemplate({ ...sheet, title: '' }, base.template), { title: sheet.title })
   return sheet

@@ -8,6 +8,8 @@ import { visibleIndexes } from './SheetView'
 
 // Carte da ritagliare: le vignette della scheda come carte singole su A4 verticale,
 // con linee di taglio tratteggiate. Facoltativa: la striscia agenda con caselle vuote e "FINITO".
+// Rispettano "Mostra" della scheda: vignetta e frase, solo vignetta, solo frase.
+// Versione da riordinare: le stesse carte in ordine mescolato.
 
 export type CardSize = 'S' | 'M' | 'L'
 
@@ -34,21 +36,40 @@ export function cardMetrics(size: CardSize) {
 }
 
 interface CardData {
-  code: string
+  /** null = carta di solo testo, senza vignetta */
+  code: string | null
   text: string
 }
 
-/** Vignette della scheda in ordine, con la frase sotto (o il titolo della scena se la frase è vuota). */
+/**
+ * Riquadri pieni della scheda in ordine, con la frase (o il titolo della scena se la frase è vuota).
+ * In "Solo testo" contano anche i riquadri con la sola frase scritta.
+ */
 export function sheetCards(sheet: Sheet): CardData[] {
   const template = templates[sheet.template]
+  const textOnly = sheet.sequence.show === 'text'
   return visibleIndexes(sheet, template)
     .map((i) => sheet.cells[i])
-    .filter((c) => c.code && getScene(c.code))
-    .map((c) => {
-      const scene = getScene(c.code!)!
-      const text = c.text?.trim() ? c.text : sceneTitle(scene, sheet.character)
-      return { code: c.code!, text }
+    .map((c): CardData | null => {
+      const scene = c.code ? getScene(c.code) : undefined
+      const text = c.text?.trim() ? c.text : scene ? sceneTitle(scene, sheet.character) : ''
+      if (scene) return { code: scene.code, text }
+      return textOnly && text ? { code: null, text } : null
     })
+    .filter((c): c is CardData => c !== null)
+}
+
+/** Ordine mescolato, mai uguale a quello giusto (se le carte non sono tutte uguali). */
+export function shuffled<T>(items: T[], same: (a: T, b: T) => boolean, random = Math.random): T[] {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const out = [...items]
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1))
+      ;[out[i], out[j]] = [out[j], out[i]]
+    }
+    if (out.some((item, i) => !same(item, items[i]))) return out
+  }
+  return [...items]
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -57,12 +78,15 @@ function chunk<T>(items: T[], size: number): T[][] {
   return out
 }
 
-/** Pagine delle carte (una o più) e, se richiesta, della striscia agenda. */
-export function cardPages(sheet: Sheet, look: SheetLook, size: CardSize, strip: boolean): ReactNode[] {
-  const cards = sheetCards(sheet)
+/** Pagine delle carte (una o più) e, se richiesta, della striscia agenda. `shuffle`: versione da riordinare. */
+export function cardPages(sheet: Sheet, look: SheetLook, size: CardSize, strip: boolean, shuffle = false): ReactNode[] {
+  const ordered = sheetCards(sheet)
+  const cards = shuffle ? shuffled(ordered, (a, b) => a.code === b.code && a.text === b.text) : ordered
+  const heading = shuffle ? '✂ Da riordinare' : '✂ Carte da ritagliare'
   const m = cardMetrics(size)
+  const showText = look.show !== 'images'
   const pages: ReactNode[] = chunk(cards, m.perPage).map((group, p, all) => (
-    <CardsPage key={`c${p}`} look={look} title={`✂ Carte da ritagliare · ${sheet.title}${all.length > 1 ? ` (${p + 1}/${all.length})` : ''}`}>
+    <CardsPage key={`c${p}`} look={look} title={`${heading} · ${sheet.title}${all.length > 1 ? ` (${p + 1}/${all.length})` : ''}`}>
       <div
         className="grid self-center border-l-[0.3mm] border-t-[0.3mm] border-dashed border-[#9c9285]"
         style={{ gridTemplateColumns: `repeat(${Math.min(m.cols, group.length)}, ${mm(m.w)})` }}
@@ -74,21 +98,33 @@ export function cardPages(sheet: Sheet, look: SheetLook, size: CardSize, strip: 
             style={{ width: mm(m.w), height: mm(m.h), padding: mm(m.inset) }}
           >
             <div
-              className="flex h-full flex-col items-center rounded-[3mm] border-[0.4mm]"
+              className={`flex h-full flex-col items-center rounded-[3mm] border-[0.4mm] ${look.show === 'both' && card.code ? '' : 'justify-center'}`}
               style={{ padding: mm(m.pad), borderColor: look.coloring ? INK : '#d9cdb8' }}
             >
-              <img
-                src={lookImage(look, card.code, sheet.character)}
-                alt=""
-                className="shrink-0 rounded-[2mm] object-cover"
-                style={{ width: mm(m.image), height: mm(m.image) }}
-              />
-              <p
-                className="line-clamp-2 flex flex-1 items-center text-center font-bold leading-[1.15]"
-                style={{ fontSize: mm(m.font), marginTop: '1mm' }}
-              >
-                {card.text}
-              </p>
+              {look.show === 'text' || !card.code ? (
+                // Solo testo: la frase grande al posto della vignetta
+                <p
+                  className="line-clamp-4 flex min-h-0 flex-1 items-center justify-center text-center font-bold leading-[1.15]"
+                  style={{ width: mm(m.image), fontSize: mm(m.font * 1.9) }}
+                >
+                  {card.text}
+                </p>
+              ) : (
+                <img
+                  src={lookImage(look, card.code, sheet.character)}
+                  alt=""
+                  className="shrink-0 rounded-[2mm] object-cover"
+                  style={{ width: mm(m.image), height: mm(m.image) }}
+                />
+              )}
+              {showText && look.show !== 'text' && card.code && (
+                <p
+                  className="line-clamp-2 flex flex-1 items-center text-center font-bold leading-[1.15]"
+                  style={{ fontSize: mm(m.font), marginTop: '1mm' }}
+                >
+                  {card.text}
+                </p>
+              )}
             </div>
           </div>
         ))}

@@ -11,7 +11,7 @@ import type { ImageVariant } from './catalog'
 import { downloadBlob } from './download'
 import { lookFor } from './look'
 import type { AppSettings } from './settings'
-import { templates } from './sheet'
+import { templates, usesDoneCircle } from './sheet'
 
 export type ExportKind = 'stampa' | 'whatsapp'
 
@@ -19,8 +19,13 @@ export type ExportKind = 'stampa' | 'whatsapp'
  * - `full`: la scheda (più le stelline da ritagliare se richieste)
  * - `stars`: solo la pagina delle stelline
  * - `cards`: carte da ritagliare (più l'eventuale striscia agenda)
+ * - `reorder`: versione da riordinare (la scheda con i riquadri vuoti, poi le carte mescolate)
  */
-export type ExportContent = { type: 'full' } | { type: 'stars' } | { type: 'cards'; size: CardSize; strip: boolean }
+export type ExportContent =
+  | { type: 'full' }
+  | { type: 'stars' }
+  | { type: 'cards'; size: CardSize; strip: boolean }
+  | { type: 'reorder'; size: CardSize }
 
 /** Impostazioni e versioni da colorare disponibili: servono per disegnare le pagine fuori dall'app */
 export interface ExportContext {
@@ -57,9 +62,17 @@ function pagesFor(sheet: Sheet, preset: Preset, content: ExportContent, ctx: Exp
       return [stars]
     case 'cards':
       return cardPages(sheet, look, content.size, content.strip).map((element) => ({ element, orientation: 'portrait' }))
+    case 'reorder': {
+      // Base: stessa impaginazione con i riquadri vuoti (restano numeri, etichette e orari)
+      const base: Sheet = { ...sheet, cells: sheet.cells.map((c) => ({ ...c, code: null, text: '', symbol: null })) }
+      return [
+        { element: <PrintSheetView sheet={base} look={{ ...look, slots: true }} />, orientation: templates[sheet.template].orientation },
+        ...cardPages(sheet, look, content.size, false, true).map((element): Page => ({ element, orientation: 'portrait' })),
+      ]
+    }
     default: {
       const pages: Page[] = [{ element: <PrintSheetView sheet={sheet} look={look} />, orientation: templates[sheet.template].orientation }]
-      if (sheet.doneCircle && sheet.cutouts) pages.push(stars)
+      if (usesDoneCircle(sheet) && sheet.cutouts) pages.push(stars)
       return pages
     }
   }
@@ -127,7 +140,7 @@ function buildPdf(sheet: Sheet, pages: Page[], canvases: HTMLCanvasElement[], jp
 
 /**
  * "La mia mattina" + bambina → "La-mia-mattina_bambina.pdf" (WhatsApp: "…_whatsapp.pdf").
- * Solo stelline: "…_stelline.pdf". Carte: "…_carte.pdf".
+ * Solo stelline: "…_stelline.pdf". Carte: "…_carte.pdf". Da riordinare: "…_riordino.pdf".
  */
 export function fileName(sheet: Sheet, kind: ExportKind, content: ExportContent): string {
   const title =
@@ -139,5 +152,6 @@ export function fileName(sheet: Sheet, kind: ExportKind, content: ExportContent)
   const suffix = kind === 'whatsapp' ? '_whatsapp' : ''
   if (content.type === 'stars') return `${title}_stelline${suffix}.pdf`
   if (content.type === 'cards') return `${title}_carte${suffix}.pdf`
+  if (content.type === 'reorder') return `${title}_riordino${suffix}.pdf`
   return `${title}_${sheet.character}${suffix}.pdf`
 }

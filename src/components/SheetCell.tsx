@@ -52,6 +52,9 @@ export function SortableSheetCell({ selected, onSelect, onChoose, onSymbol, onCl
   const filled = !!(cell.code && getScene(cell.code))
   const defaultText = defaultTextFor(cell, character, template)
   const compact = template.layout === 'agenda'
+  const textOnly = look.show === 'text'
+  const value = cell.text ?? defaultText
+  const setText = (text: string) => onChange({ text: text === defaultText ? null : text })
 
   return (
     <CellFrame
@@ -90,23 +93,45 @@ export function SortableSheetCell({ selected, onSelect, onChoose, onSymbol, onCl
           selected={selected}
           compact={compact}
           onChoose={onChoose}
-          onSymbol={onSymbol}
+          onSymbol={textOnly ? undefined : onSymbol}
           onClear={onClear}
           onCopyNext={onCopyNext}
         />
       }
-      empty={<EmptyPick onClick={onChoose} label={compact ? 'Scegli' : undefined} />}
-      text={
-        <textarea
-          value={cell.text ?? defaultText}
-          onChange={(e) => onChange({ text: e.target.value === defaultText ? null : e.target.value })}
-          rows={compact ? 1 : 2}
-          placeholder={compact ? (filled ? 'frase' : '') : filled ? '' : 'Frase'}
-          aria-label={`Frase riquadro ${index + 1}`}
-          className={compact ? compactTextClass : textClass}
-          style={{ fontSize: `${template.textMm}mm` }}
-          {...stopDrag}
-        />
+      empty={<EmptyPick onClick={onChoose} label={compact || template.layout === 'checklist' ? 'Scegli' : undefined} />}
+      text={(variant) =>
+        variant === 'big' ? (
+          <div className="flex h-full items-center justify-center">
+            <GrowingText
+              value={value}
+              onChange={setText}
+              placeholder="Scrivi il passaggio"
+              label={`Frase riquadro ${index + 1}`}
+              className={bigTextClass}
+              fontSize={bigTextSize}
+            />
+          </div>
+        ) : variant === 'row' ? (
+          <GrowingText
+            value={value}
+            onChange={setText}
+            placeholder={filled ? '' : 'Scrivi il passaggio'}
+            label={`Frase riquadro ${index + 1}`}
+            className={rowTextClass}
+            fontSize={rowTextSize(template)}
+          />
+        ) : (
+          <textarea
+            value={value}
+            onChange={(e) => setText(e.target.value)}
+            rows={compact ? 1 : 2}
+            placeholder={compact ? (filled ? 'frase' : '') : filled ? '' : 'Frase'}
+            aria-label={`Frase riquadro ${index + 1}`}
+            className={compact ? compactTextClass : textClass}
+            style={{ fontSize: `${template.textMm}mm` }}
+            {...stopDrag}
+          />
+        )
       }
     />
   )
@@ -130,8 +155,18 @@ export function PrintSheetCell(props: Props) {
           </>
         ) : null
       }
-      text={
-        compact ? (
+      text={(variant) =>
+        variant === 'big' ? (
+          <div className="flex h-full items-center justify-center">
+            <p className={`${bigTextClass} line-clamp-4`} style={{ fontSize: bigTextSize }}>
+              {text}
+            </p>
+          </div>
+        ) : variant === 'row' ? (
+          <p className={`${rowTextClass} line-clamp-2`} style={{ fontSize: rowTextSize(template) }}>
+            {text}
+          </p>
+        ) : compact ? (
           <p className={`${compactTextClass} truncate`} style={{ fontSize: `${template.textMm}mm` }}>
             {text}
           </p>
@@ -147,10 +182,56 @@ export function PrintSheetCell(props: Props) {
 
 const textClass = 'sheet-field mt-[1mm] shrink-0 whitespace-pre-wrap px-[1mm] text-center font-bold leading-[1.15]'
 const compactTextClass = 'sheet-field mt-[0.5mm] h-[calc(1lh+3px)] shrink-0 px-[0.5mm] text-center font-bold leading-[1.15]'
+/** Solo testo: la frase prende il posto della vignetta, grande e al centro */
+const bigTextClass = 'sheet-field w-full whitespace-pre-wrap text-center font-bold leading-[1.15]'
+const bigTextSize = 'min(14mm, 15cqw, 24cqh)'
+/** Checklist: frase accanto alla vignetta; il corpo si riduce quando le righe sono tante */
+const rowTextClass = 'sheet-field w-full whitespace-pre-wrap font-bold leading-[1.15]'
+const rowTextSize = (template: Template) => `min(${template.textMm}mm, 27cqh)`
+
+/** Dove va la frase: sotto la vignetta, al suo posto (solo testo), accanto (checklist) */
+type TextVariant = 'caption' | 'big' | 'row'
+
+/**
+ * Campo di testo alto quanto il suo contenuto (una copia invisibile del testo dà l'altezza):
+ * così, centrato nel riquadro, sta dove starà nel PDF. Al massimo 4 righe, poi scorre.
+ */
+function GrowingText({
+  value,
+  onChange,
+  placeholder,
+  label,
+  className,
+  fontSize,
+}: {
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+  label: string
+  className: string
+  fontSize: string
+}) {
+  return (
+    <div className="grid max-h-full w-full overflow-hidden" style={{ fontSize }}>
+      <span aria-hidden="true" className={`${className} invisible line-clamp-4 [grid-area:1/1]`}>
+        {(value || placeholder || ' ') + ' '}
+      </span>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={1}
+        placeholder={placeholder}
+        aria-label={label}
+        className={`${className} h-full resize-none overflow-hidden [grid-area:1/1]`}
+        {...stopDrag}
+      />
+    </div>
+  )
+}
 
 interface FrameProps extends Props {
   time: ReactNode
-  text: ReactNode
+  text: (variant: TextVariant) => ReactNode
   overlay?: ReactNode
   empty?: ReactNode
   className?: string
@@ -183,6 +264,57 @@ function CellFrame({
   const compact = template.layout === 'agenda'
   const highlighted = template.highlight === index
   const borderWidth = highlighted ? '1.4mm' : compact ? '0.4mm' : '0.6mm'
+  const showImage = look.show !== 'text'
+  const showText = look.show !== 'images'
+  const showNumber = template.numbered && look.numbers
+  // Senza numeri la colonna a sinistra resta solo per l'orario, se c'è
+  const numberColumn = showNumber || (template.times && cell.time.trim() !== '')
+
+  const number = (
+    <span
+      className={`flex h-[11mm] w-[11mm] shrink-0 items-center justify-center rounded-full text-[6.5mm] font-bold leading-none ${
+        mono ? 'border-[0.6mm] bg-white' : 'text-white shadow-sm'
+      }`}
+      style={mono ? { borderColor: INK, color: INK } : { backgroundColor: color }}
+    >
+      {index + 1}
+    </span>
+  )
+
+  const picture = scene ? (
+    <>
+      <SceneSquare code={scene.code} character={character} symbol={cell.symbol} doneCircle={doneCircle} />
+      {overlay}
+    </>
+  ) : look.slots ? (
+    <div
+      className="absolute inset-0 m-auto size-[min(100cqw,100cqh)] rounded-[7%] border-[0.5mm] border-dashed"
+      style={{ borderColor: mono ? INK : '#b8ad9c' }}
+    />
+  ) : (
+    empty
+  )
+
+  if (template.layout === 'checklist') {
+    // Riga: numero, vignetta piccola, frase, casella da spuntare
+    return (
+      <div
+        ref={frameRef}
+        style={{ ...frameStyle, borderColor: mono ? INK : `${color}66`, borderWidth }}
+        className={`group relative flex min-h-0 items-center gap-[3mm] rounded-[4mm] bg-white px-[3mm] py-[1.5mm] [container-type:size] ${className}`}
+        {...frameProps}
+      >
+        {showNumber && number}
+        {showImage && <div className="relative h-full w-[100cqh] shrink-0 [container-type:size]">{picture}</div>}
+        <div className="min-w-0 flex-1">{(showText || !showImage) && text('row')}</div>
+        <span
+          aria-hidden="true"
+          className="h-[min(12mm,70cqh)] w-[min(12mm,70cqh)] shrink-0 rounded-[2mm] border-[0.7mm] bg-white"
+          style={{ borderColor: mono ? INK : color }}
+        />
+      </div>
+    )
+  }
 
   return (
     <div
@@ -201,35 +333,28 @@ function CellFrame({
       )}
 
       <div className="flex min-h-0 flex-1 gap-[1.5mm]">
-        {template.numbered && (
+        {numberColumn && (
           /* Colonna a sinistra: numero del passaggio e, sotto, l'orario */
           <div className="flex w-[13mm] shrink-0 flex-col items-center gap-[1.5mm]">
-            <span
-              className={`flex h-[11mm] w-[11mm] shrink-0 items-center justify-center rounded-full text-[6.5mm] font-bold leading-none ${
-                mono ? 'border-[0.6mm] bg-white' : 'text-white shadow-sm'
-              }`}
-              style={mono ? { borderColor: INK, color: INK } : { backgroundColor: color }}
-            >
-              {index + 1}
-            </span>
-            {time}
+            {showNumber && number}
+            {template.times && time}
           </div>
         )}
 
-        {/* container-type: size → le unità cqw/cqh misurano lo spazio disponibile per la vignetta */}
+        {/* container-type: size → le unità cqw/cqh misurano lo spazio disponibile per la vignetta (o la frase) */}
         <div className="relative min-h-0 flex-1 [container-type:size]">
-          {scene ? (
-            <>
-              <SceneSquare code={scene.code} character={character} symbol={cell.symbol} doneCircle={doneCircle} />
-              {overlay}
-            </>
+          {showImage ? (
+            picture
           ) : (
-            empty
+            <>
+              {text('big')}
+              {scene && overlay}
+            </>
           )}
         </div>
       </div>
 
-      {text}
+      {showImage && showText && text('caption')}
     </div>
   )
 }
