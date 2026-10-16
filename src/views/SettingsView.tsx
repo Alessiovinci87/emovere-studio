@@ -1,9 +1,12 @@
 import { useRef, useState } from 'react'
+import type { Session } from '../AuthGate'
+import { AccountPanel, MembersPanel, PrivacyVerifiedPanel } from '../components/AccountSettings'
 import { Page, SectionHeader } from '../components/AppShell'
 import { Button, PRIVACY_TEXT, inputClass } from '../components/ui'
 import { readLogo, type AppSettings } from '../lib/settings'
 
 interface Props {
+  session: Session
   settings: AppSettings
   onSettings: (patch: Partial<AppSettings>) => void
   lastBackup: string | null
@@ -13,7 +16,7 @@ interface Props {
   onImport: (file: File) => void
 }
 
-export function SettingsView({ settings, onSettings, lastBackup, folders, sheets, onExport, onImport }: Props) {
+export function SettingsView({ session, settings, onSettings, lastBackup, folders, sheets, onExport, onImport }: Props) {
   const backupInput = useRef<HTMLInputElement>(null)
   const logoInput = useRef<HTMLInputElement>(null)
   const [logoError, setLogoError] = useState<string | null>(null)
@@ -22,6 +25,16 @@ export function SettingsView({ settings, onSettings, lastBackup, folders, sheets
     <Page>
       <SectionHeader title="Impostazioni" />
       <div className="flex max-w-2xl flex-col gap-6">
+        {session.account?.organization && (
+          <>
+            <Card title="Account">
+              <AccountPanel session={session} />
+            </Card>
+            <Card title="Membri del centro">
+              <MembersPanel session={session} />
+            </Card>
+          </>
+        )}
         <Card title="Centro">
           <p className="leading-relaxed text-muted">
             Logo e nome compaiono in un piè di pagina sottile nei PDF (si può spegnere scheda per scheda con “Mostra logo”).
@@ -125,6 +138,7 @@ export function SettingsView({ settings, onSettings, lastBackup, folders, sheets
 
         <Card title="Privacy">
           <p className="leading-relaxed text-muted">🔒 {PRIVACY_TEXT}</p>
+          {session.account?.organization && <PrivacyVerifiedPanel session={session} />}
         </Card>
 
         <Card title="Informazioni">

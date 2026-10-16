@@ -20,9 +20,21 @@ Strumento per comporre schede visive (routine, storie sociali, prima/poi, scelte
   1. Supabase Pro (backup giornalieri, protezione dalle password già rubate) e Vercel Pro (uso commerciale)
   2. DPA firmati (Supabase, OpenAI e l'eventuale fornitore dei testi)
   3. Parere del consulente privacy (informativa e consenso dei genitori, registro dei trattamenti, DPIA)
-  4. Reset della password del database Supabase (quella attuale è stata condivisa in chat) e nuovo supabase link
+  4. Reset della password del database Supabase (quella iniziale era stata condivisa in chat) e nuovo supabase link: fatto il 16 ottobre 2026. A ogni nuovo reset aggiornare anche `DATABASE_URL` su Vercel e ripetere il link
   5. Il titolare attiva "Privacy verificata" (`organizations.privacy_verified_at`, solo ruolo `titolare`)
 - Finché "Privacy verificata" non è attiva, la schermata Bambini mostra l'avviso "Solo dati di prova" (`TestDataWarning` in `src/components/ui.tsx`). Prima del login l'avviso è sempre visibile
+
+## Login (Supabase Auth)
+- Nessuna iscrizione libera: il primo utente (invitato dal pannello di Supabase) crea il centro ("Crea il centro", solo finché non esiste nessun centro: `app.setup_available()`), poi gli account arrivano solo su invito del titolare (Impostazioni → Membri del centro)
+- MFA obbligatoria per tutti (TOTP con app di autenticazione): senza `aal2` né il middleware né `/api` restituiscono dati. Il titolare può azzerare il secondo fattore di un membro; quello del titolare si azzera dal pannello di Supabase
+- Percorso (`src/lib/useAuth.ts`, schermate in `src/views/AuthViews.tsx`, cornice `src/AuthGate.tsx`): link dell'email → login → codice MFA → nuova password (dopo invito o reimposta) → attivazione MFA → centro → app
+- Email (testi in `supabase/templates/`, da incollare in Authentication → Emails): i link portano a `/benvenuto?token_hash=…&type=invite` e `/reimposta-password?token_hash=…&type=recovery`, verificati dall'app con `verifyOtp` (funzionano anche aprendo l'email su un altro dispositivo). Mittente provvisorio: Gmail SMTP (`smtp.gmail.com:587`, `ale87.v@gmail.com`, password per le app), configurato direttamente in Supabase (Authentication → Emails → SMTP). I template non nominano il mittente
+- Password: almeno 12 caratteri con maiuscole, minuscole e numeri (stesse regole su Supabase e in `passwordProblem`)
+- Client in `src/lib/supabase.ts` (sessione in cookie con `@supabase/ssr`); chiamate a `/api` con il token in `src/lib/account.ts`. In locale il login è spento (l'app funziona come prima); per provarlo: `VITE_AUTH_DEV=1` con `vercel dev`
+- Funzioni: `GET /api/me` (utente, centro, ruolo, privacy), `POST /api/setup` (primo centro, con la chiave dati cifrata), `/api/members` (elenco; invito, ruolo, rimozione, azzera MFA: solo titolare), `PATCH /api/organization` ("Privacy verificata", titolare del trattamento: solo titolare). Ogni modifica finisce in `audit_log`
+- Server: `api/_lib/auth.ts` (`requireUser`, `adminAuth` con `SUPABASE_SECRET_KEY`), `api/_lib/db.ts` (`asUser`: transazione con `emovere_app` e `app.user_id`), `api/_lib/crypto.ts` (chiave doppia AES-256-GCM, contesto come AAD)
+- Variabili su Vercel: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (pubbliche); `SUPABASE_SECRET_KEY`, `DATABASE_URL` (pooler, porta 6543), `DATA_ENCRYPTION_KEY` (32 byte base64, anche nel password manager: senza, i dati cifrati sono persi) come Sensitive. In locale `.env.local` contiene solo le due `VITE_`
+- Collaudo delle funzioni: compilare in `.apitest` (vedi "Vignette con AI") e lanciare `node scripts/test-api.mjs` contro un PostgreSQL locale con stub e migrazioni (`TEST_DATABASE_URL`; istruzioni in testa al file; chiavi JWT generate dal test). Inviti e azzeramento MFA (API di amministrazione di Supabase) si provano solo online
 
 ## Database (Supabase)
 - Migrazioni in `supabase/migrations/` (versionate), configurazione CLI in `supabase/config.toml`. Si applicano con `npx supabase db push` dopo `npx supabase link --project-ref vrlryycceswltabasogi`. Pooler (per `DATABASE_URL`): `aws-0-eu-west-1.pooler.supabase.com`, utente `postgres.vrlryycceswltabasogi`; la password del database non va mai in chat né nel codice
@@ -85,7 +97,7 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
   3. "Genera": la versione bambina e la versione bambino vengono create in parallelo; anteprima con "Salva in libreria", "Rigenera", "Annulla"
   4. al salvataggio si confermano titoli (f/m) e tag proposti; il codice è `X` + progressivo (X001, X002…), mai riusato anche dopo un'eliminazione
 - In libreria le vignette AI hanno l'etichetta "AI", il filtro "Create con AI" (blocco `X`) e si possono eliminare (con avviso se usate in qualche scheda)
-- Server (`api/`, protetto dalla password di `middleware.ts`):
+- Server (`api/`, protetto dal login con secondo fattore, vedi "Login" e "Deploy"):
   - `GET /api/generate`: limite, immagini usate oggi, adulti disponibili. `POST /api/generate`: (a) modello di testo economico → frase d'azione in inglese + `title_f`, `title_m`, tag in italiano (JSON a schema fisso); (b) endpoint di modifica immagini, una chiamata per personaggio con il suo foglio di riferimento (+ adulto), qualità media, 1024×1024, WebP
   - Il prompt dell'immagine lo compone solo il server con il template fisso (`buildImagePrompt` in `src/config/ai.ts`); il testo dell'utente non entra mai nel prompt dell'immagine. Rispetto al template base ci sono due righe in più: espressione e, se scelto, adulto
   - Testi fissi di ambienti, abbigliamenti e adulti presi dalla "Libreria prompt scene – Emovere", in `src/config/ai.ts` (lo stesso file definisce modelli, qualità, formato, limite predefinito)
@@ -107,6 +119,7 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
 - Costo: il listino OpenAI per `gpt-image-2.5` è a token (immagini in uscita $30/M, in ingresso $8/M) senza prezzo per immagine; stima 5-10 centesimi per immagine, 10-25 per vignetta (2 immagini + testo, che costa quasi nulla). Il costo reale si legge nella pagina Usage di OpenAI
 - Oggi il limite è unico per tutta l'app (un solo account, protetto da password)
 - Per la vendita servono prima login e account (fase successiva). Poi: piani con una quota di immagini al mese (es. Base / Pro), contatore per account invece che globale, quota mostrata nell'app, avviso all'80%, eventuale acquisto di pacchetti extra; il limite globale resta come tetto di sicurezza sulla spesa totale
+- Email: prima della vendita sostituire il Gmail personale con un dominio del prodotto (mittente tipo `noreply@…`, SPF/DKIM/DMARC) e un servizio SMTP dedicato con DPA (es. Brevo, Postmark); Gmail ha limiti di invio bassi ed è un account personale
 - Il codice è già predisposto: quantità e periodo stanno nelle variabili d'ambiente, il contatore è in `api/_lib/storage.ts` (`usedInPeriod`/`addUsage`) e basterà renderlo per account
 
 ## Funzioni del prototipo
@@ -191,9 +204,8 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
 
 ## Deploy
 - Vercel, configurazione in `vercel.json`; la build genera le immagini con `sharp`
-- Protezione: `middleware.ts` (Vercel Routing Middleware) mostra una schermata con password prima di qualunque pagina o immagine
-- Password nella variabile d'ambiente `APP_PASSWORD` (su Vercel, mai nel codice); senza variabile il sito resta chiuso. Protegge anche le funzioni `/api`
-- Dopo l'accesso un cookie HttpOnly ricorda il browser per un anno; cambiando la password tutti i cookie vecchi decadono
+- Protezione: `middleware.ts` (Vercel Routing Middleware). `/library/*` e `/api/*` richiedono una sessione Supabase valida con secondo fattore (`aal2`), letta dal cookie di `@supabase/ssr` o da `Authorization: Bearer` (`api/_lib/session.ts`, firma verificata con le chiavi pubbliche JWKS del progetto). La pagina dell'app (`index.html`, `/assets`) è pubblica: mostra il login
+- Password unica facoltativa: se `APP_PASSWORD` è impostata su Vercel resta una barriera in più davanti a tutto il sito (cookie HttpOnly di un anno, decade cambiando la password); cancellando la variabile si toglie
 - In locale (`npm run dev`) il middleware non gira
 
 ## Design

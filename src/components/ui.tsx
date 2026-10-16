@@ -14,7 +14,7 @@ export function PrivacyNote({ id }: { id?: string }) {
 
 /**
  * Avviso fisso nella schermata Bambini finché il titolare non attiva "Privacy verificata"
- * (organizations.privacy_verified_at). Prima del login non si può attivare: resta sempre visibile.
+ * (organizations.privacy_verified_at). In locale, senza login, resta sempre visibile.
  */
 export function TestDataWarning() {
   return (

@@ -7,6 +7,8 @@ import { StatusCounts } from './Status'
 import { Button, NameInput, TestDataWarning } from './ui'
 
 interface Props {
+  /** Privacy non ancora verificata dal titolare: avviso "Solo dati di prova" */
+  testData: boolean
   folders: Folder[]
   sheets: Sheet[]
   onOpenFolder: (id: string) => void
@@ -14,7 +16,7 @@ interface Props {
 }
 
 /** Schermata principale: le cartelle dei bambini con i contatori per stato. */
-export function FoldersView({ folders, sheets, onOpenFolder, onCreateFolder }: Props) {
+export function FoldersView({ testData, folders, sheets, onOpenFolder, onCreateFolder }: Props) {
   const [creating, setCreating] = useState(false)
   const sorted = [...folders].sort((a, b) => a.name.localeCompare(b.name, 'it'))
 
@@ -30,7 +32,7 @@ export function FoldersView({ folders, sheets, onOpenFolder, onCreateFolder }: P
         }
       />
 
-      <TestDataWarning />
+      {testData && <TestDataWarning />}
 
       {sorted.length === 0 ? (
         <div className="rounded-3xl bg-sand/60 px-6 py-12 text-center text-muted">

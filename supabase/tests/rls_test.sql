@@ -43,12 +43,22 @@ insert into auth.users (id, email) values
 -- ——— Centro 1 (A) e centro 2 (C) ———
 set role emovere_app;
 select set_config('app.user_id', '00000000-0000-0000-0000-00000000000a', false);
-select set_config('t.org1', app.create_organization('Centro Emovere', 'kv1:fake', 'Martina')::text, false);
+select pg_temp.ok(app.setup_available(), 'primo centro da creare');
+select set_config('t.org1', app.create_organization('Centro Emovere', 'kv1:fake', 'a@test', 'Martina')::text, false);
+select pg_temp.ok(not app.setup_available(), 'primo centro creato');
+select pg_temp.ok((select data_controller = 'Centro Emovere' from app.organizations), 'titolare del trattamento = nome del centro');
+select pg_temp.ok((select email = 'a@test' and role = 'titolare' from app.memberships), 'A titolare con email');
 insert into app.memberships (org_id, user_id, role)
   values (current_setting('t.org1')::uuid, '00000000-0000-0000-0000-00000000000b', 'operatore');
 
+-- Il secondo centro non si crea dall'app (lo inseriamo come amministratore)
 select set_config('app.user_id', '00000000-0000-0000-0000-00000000000c', false);
-select set_config('t.org2', app.create_organization('Altro centro', 'kv1:fake')::text, false);
+select pg_temp.expect_error($q$select app.create_organization('Altro centro', 'kv1:fake', 'c@test')$q$, 'P0002');
+reset role;
+with o as (insert into app.organizations (name, dek_wrapped) values ('Altro centro', 'kv1:fake') returning id),
+     m as (insert into app.memberships (org_id, user_id, role) select id, '00000000-0000-0000-0000-00000000000c', 'titolare' from o)
+select set_config('t.org2', id::text, false) from o;
+set role emovere_app;
 insert into app.children (org_id, pseudonym) values (current_setting('t.org2')::uuid, 'Gufo');
 
 -- C non può aggiungersi al centro 1
@@ -112,7 +122,7 @@ select pg_temp.expect_error(format(
 -- Utente senza app.user_id: niente
 select set_config('app.user_id', '', false);
 select pg_temp.ok((select count(*) from app.children) = 0, 'senza utente non si vede niente');
-select pg_temp.expect_error($q$select app.create_organization('x', 'y')$q$, 'P0001');
+select pg_temp.expect_error($q$select app.create_organization('x', 'y', 'z')$q$, 'P0001');
 
 -- ——— Privacy verificata (titolare) ———
 select set_config('app.user_id', '00000000-0000-0000-0000-00000000000a', false);

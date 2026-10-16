@@ -1,9 +1,15 @@
-// Protezione con password per il deploy su Vercel (Routing Middleware).
-// Gira sul server prima di ogni richiesta, quindi protegge anche le immagini in /library.
-// La password sta nella variabile d'ambiente APP_PASSWORD (impostata su Vercel, mai nel codice).
-// Dopo l'accesso il browser riceve un cookie valido un anno; cambiando la password i cookie vecchi decadono.
-// In locale (npm run dev) il middleware non gira: l'app è aperta.
+// Protezione del deploy su Vercel (Routing Middleware): gira sul server prima di ogni richiesta.
+//
+// 1. Login (Supabase Auth): immagini della libreria (/library) e funzioni (/api) richiedono una sessione
+//    valida con secondo fattore (aal2), letta dal cookie scritto da @supabase/ssr o dall'intestazione
+//    Authorization. La pagina dell'app (index.html e /assets) resta pubblica: contiene solo il codice,
+//    nessun dato, e mostra la schermata di accesso.
+// 2. Password unica facoltativa (APP_PASSWORD): se la variabile è impostata, resta una barriera in più
+//    davanti a tutto il sito; per toglierla basta cancellarla da Vercel. Il cookie dura un anno e
+//    cambiando la password i cookie vecchi decadono.
+// In locale (npm run dev) il middleware non gira.
 import { next } from '@vercel/functions'
+import { accessTokenFrom, verifyAccessToken } from './api/_lib/session.js'
 
 declare const process: { env: Record<string, string | undefined> }
 
@@ -14,29 +20,46 @@ const LOGIN_PATH = '/__accesso'
 const ONE_YEAR = 60 * 60 * 24 * 365
 
 export default async function middleware(request: Request): Promise<Response> {
-  const password = process.env.APP_PASSWORD
-  if (!password) {
-    return loginPage('L’accesso non è ancora configurato (manca APP_PASSWORD).', 503)
-  }
-  const token = await tokenFor(password)
   const url = new URL(request.url)
 
-  if (url.pathname === LOGIN_PATH && request.method === 'POST') {
-    const form = await request.formData()
-    if (form.get('password') !== password) {
-      return loginPage('Password non corretta. Riprova.', 401)
+  const password = process.env.APP_PASSWORD
+  if (password) {
+    const token = await tokenFor(password)
+    if (url.pathname === LOGIN_PATH && request.method === 'POST') {
+      const form = await request.formData()
+      if (form.get('password') !== password) {
+        return loginPage('Password non corretta. Riprova.', 401)
+      }
+      return new Response(null, {
+        status: 303,
+        headers: {
+          Location: '/',
+          'Set-Cookie': `${COOKIE}=${token}; Path=/; Max-Age=${ONE_YEAR}; HttpOnly; Secure; SameSite=Lax`,
+        },
+      })
     }
-    return new Response(null, {
-      status: 303,
-      headers: {
-        Location: '/',
-        'Set-Cookie': `${COOKIE}=${token}; Path=/; Max-Age=${ONE_YEAR}; HttpOnly; Secure; SameSite=Lax`,
-      },
-    })
+    if (readCookie(request, COOKIE) !== token) return loginPage(null, 401)
   }
 
-  if (readCookie(request, COOKIE) === token) return next()
-  return loginPage(null, 401)
+  const isApi = url.pathname.startsWith('/api/')
+  if (!isApi && !url.pathname.startsWith('/library/')) return next()
+
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL
+  if (!supabaseUrl) return denied(isApi, 'L’accesso non è ancora configurato (manca VITE_SUPABASE_URL).', 503)
+  const accessToken = accessTokenFrom(request, supabaseUrl)
+  const claims = accessToken ? await verifyAccessToken(accessToken, supabaseUrl) : null
+  if (!claims) return denied(isApi, 'Sessione scaduta: accedi di nuovo.', 401)
+  if (claims.aal !== 'aal2') return denied(isApi, 'Serve il codice dell’app di autenticazione.', 403)
+  return next()
+}
+
+function denied(isApi: boolean, message: string, status: number): Response {
+  return isApi
+    ? new Response(JSON.stringify({ error: message }), {
+        status,
+        headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+      })
+    : new Response(message, { status, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } })
 }
 
 /** Valore del cookie: impronta SHA-256 della password (la password non viaggia nel cookie). */

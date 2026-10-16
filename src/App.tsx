@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { Session } from './AuthGate'
 import { AiCreateDialog } from './components/AiCreateDialog'
 import { AppShell, Page, SectionHeader } from './components/AppShell'
 import { Editor } from './components/Editor'
@@ -31,7 +32,7 @@ type FolderChoice = { folderId: string } | { newName: string }
 
 const STORAGE_FULL = 'Spazio del browser esaurito: le ultime modifiche non sono salvate. Esporta un backup.'
 
-export default function App() {
+export default function App({ session }: { session: Session }) {
   const { route, depth, navigate, back } = useRouter()
   const [data, setData] = useState<StoreData>(store.loadData)
   /** Scheda non ancora salvata in una cartella */
@@ -324,6 +325,7 @@ Non si può annullare.`)) return
       case 'bambini':
         return (
           <FoldersView
+            testData={!session.account?.organization?.privacyVerifiedAt}
             folders={data.folders}
             sheets={data.sheets}
             onOpenFolder={openFolder}
@@ -395,6 +397,7 @@ Non si può annullare.`)) return
       case 'impostazioni':
         return (
           <SettingsView
+            session={session}
             settings={settings}
             onSettings={(patch) => setSettings((s) => ({ ...s, ...patch }))}
             lastBackup={lastBackup}
