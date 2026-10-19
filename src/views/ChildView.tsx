@@ -7,6 +7,7 @@ import { ErrorText, ProfileTab } from '../components/child/ProfileTab'
 import { FolderNameDialog } from '../components/FoldersView'
 import { Button, NotesField } from '../components/ui'
 import { childApi, type ChildDetail, type Goal, type ProfileEntry } from '../lib/childApi'
+import type { ServerMaterial } from '../lib/materials'
 import type { ExportContext } from '../lib/exportPdf'
 import type { ChildTab } from '../lib/router'
 import type { Folder, Sheet } from '../types'
@@ -35,7 +36,9 @@ interface Props {
   onRename: (name: string) => void
   onNotes: (notes: string) => void
   onTrash: () => void
-  onNewSheet: () => void
+  /** Flusso guidato "Nuovo materiale" per il bambino (con l'obiettivo già scelto, dalla scheda Obiettivi) */
+  onNewSheet: (goalId?: string) => void
+  onOpenGuide: (id: string) => void
   /** Eliminato per sempre sul server (solo titolare) */
   onDeleted: () => void
   /** Attende che una scheda (anche appena creata) sia salvata sul server in questo bambino */
@@ -43,9 +46,11 @@ interface Props {
   whenFolderSaved: (id: string, signal?: AbortSignal) => Promise<void>
 }
 
-export function ChildView({ folder, sheets, tab, isOwner, exportContext, sheetActions, onTab, onBack, onRename, onNotes, onTrash, onNewSheet, onDeleted, whenSheetSaved, whenFolderSaved }: Props) {
+export function ChildView({ folder, sheets, tab, isOwner, exportContext, sheetActions, onTab, onBack, onRename, onNotes, onTrash, onNewSheet, onOpenGuide, onDeleted, whenSheetSaved, whenFolderSaved }: Props) {
   const [detail, setDetail] = useState<ChildDetail | null>(null)
   const [links, setLinks] = useState<Map<string, string[]> | null>(null)
+  /** Guide del bambino (stanno solo sul server, non nei dati dell'app) */
+  const [guides, setGuides] = useState<ServerMaterial[]>([])
   const [error, setError] = useState<string | null>(null)
   const [renaming, setRenaming] = useState(false)
 
@@ -55,10 +60,11 @@ export function ChildView({ folder, sheets, tab, isOwner, exportContext, sheetAc
       setError(null)
       try {
         await whenFolderSaved(folder.id, signal)
-        const [d, l] = await Promise.all([childApi.detail(folder.id), childApi.goalLinks(folder.id)])
+        const [d, materials] = await Promise.all([childApi.detail(folder.id), childApi.materials(folder.id)])
         if (signal?.aborted) return
         setDetail(d)
-        setLinks(l)
+        setLinks(new Map(materials.map((m) => [m.id, m.goalIds])))
+        setGuides(materials.filter((m) => m.kind === 'guida'))
       } catch (err) {
         if ((err as Error).name !== 'AbortError') setError((err as Error).message)
       }
@@ -74,16 +80,18 @@ export function ChildView({ folder, sheets, tab, isOwner, exportContext, sheetAc
   const setEntries = (update: (list: ProfileEntry[]) => ProfileEntry[]) => setDetail((d) => (d ? { ...d, profile: update(d.profile) } : d))
   const setGoals = (update: (list: Goal[]) => Goal[]) => setDetail((d) => (d ? { ...d, goals: update(d.goals) } : d))
 
-  /** Prima si aspetta che la scheda sia sul server (una scheda appena creata si sta ancora salvando) */
-  async function setSheetGoals(sheet: Sheet, goalIds: string[], signal: AbortSignal, onWaiting: () => void) {
-    const waiting = setTimeout(onWaiting, 300)
-    try {
-      await whenSheetSaved(sheet.id, folder.id, signal)
-    } finally {
-      clearTimeout(waiting)
+  /** Una scheda appena creata si sta forse ancora salvando: prima si aspetta che sia sul server (le guide ci sono già) */
+  async function setMaterialGoals(item: { id: string; guide: boolean }, goalIds: string[], signal: AbortSignal, onWaiting: () => void) {
+    if (!item.guide) {
+      const waiting = setTimeout(onWaiting, 300)
+      try {
+        await whenSheetSaved(item.id, folder.id, signal)
+      } finally {
+        clearTimeout(waiting)
+      }
     }
-    const { material, goalEvents } = await childApi.setGoals(sheet.id, goalIds)
-    setLinks((l) => new Map(l).set(sheet.id, material.goalIds))
+    const { material, goalEvents } = await childApi.setGoals(item.id, goalIds)
+    setLinks((l) => new Map(l).set(item.id, material.goalIds))
     setGoals((list) =>
       list.map((g) => {
         const added = goalEvents.filter((e) => e.goalId === g.id).map((e) => e.event)
@@ -93,7 +101,7 @@ export function ChildView({ folder, sheets, tab, isOwner, exportContext, sheetAc
   }
 
   const goals = detail?.goals ?? []
-  const linkedCount = (goalId: string) => sheets.filter((s) => links?.get(s.id)?.includes(goalId)).length
+  const linkedCount = (goalId: string) => [...sheets, ...guides].filter((s) => links?.get(s.id)?.includes(goalId)).length
   const activeGoals = goals.filter((g) => g.status === 'attivo').length
   const subtitle = [
     folder.code,
@@ -112,7 +120,7 @@ export function ChildView({ folder, sheets, tab, isOwner, exportContext, sheetAc
         onBack={onBack}
         actions={
           <>
-            <Button tone="primary" onClick={onNewSheet}>
+            <Button tone="primary" onClick={() => onNewSheet()}>
               + Nuovo materiale
             </Button>
             <MoreMenu
@@ -167,12 +175,28 @@ export function ChildView({ folder, sheets, tab, isOwner, exportContext, sheetAc
         <ProfileTab child={detail.child} entries={detail.profile} onChild={(child) => setDetail((d) => (d ? { ...d, child } : d))} onEntries={setEntries} />
       )}
       {tab === 'obiettivi' && detail && (
-        <GoalsTab childId={folder.id} goals={detail.goals} isOwner={isOwner} linkedCount={linkedCount} onGoals={setGoals} />
+        <GoalsTab
+          childId={folder.id}
+          goals={detail.goals}
+          isOwner={isOwner}
+          linkedCount={linkedCount}
+          onGoals={setGoals}
+          onNewMaterial={(goalId) => onNewSheet(goalId)}
+        />
       )}
       {tab === 'materiali' && (
         <>
           {error && <p className="mb-4 text-sm text-muted">Obiettivi non caricati: {error}</p>}
-          <MaterialsTab sheets={sheets} goals={goals} links={links} actions={sheetActions} onNewSheet={onNewSheet} onSetGoals={setSheetGoals} />
+          <MaterialsTab
+            sheets={sheets}
+            guides={guides}
+            goals={goals}
+            links={links}
+            actions={sheetActions}
+            onOpenGuide={onOpenGuide}
+            onNewSheet={() => onNewSheet()}
+            onSetGoals={setMaterialGoals}
+          />
         </>
       )}
       {tab === 'note' && (

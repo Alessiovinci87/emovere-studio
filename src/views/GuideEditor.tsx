@@ -15,8 +15,11 @@ import {
   type GuideInput,
   type GuideVersion,
 } from '../config/guide'
+import type { ProfileLine } from '../config/flow'
+import { childApi } from '../lib/childApi'
 import type { ExportKind } from '../lib/exportPdf'
-import { guideApi, normalizeGuide, unconfirmed, type GuideContent } from '../lib/guide'
+import { chosenProfileLines } from '../lib/flow'
+import { guideApi, normalizeGuide, unconfirmed, type GuideContent, type ProfileRequest } from '../lib/guide'
 import { materialsApi, type ServerMaterial } from '../lib/materials'
 import type { AppSettings } from '../lib/settings'
 import { syncLabel, useAutosave } from '../lib/useAutosave'
@@ -65,14 +68,31 @@ function GuideEditor({ material, settings, names, onOpen, onClose }: Omit<Props,
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
+  // Guida di un bambino creata dal flusso guidato: le voci del profilo scelte vanno anche nelle nuove richieste
+  const usesProfile = material.childId !== null && guide.profileIds.length > 0
+  const [profile, setProfile] = useState<ProfileLine[] | null>(usesProfile ? null : [])
+  const profileIdsKey = guide.profileIds.join(',')
+  useEffect(() => {
+    if (!usesProfile || !material.childId) return
+    let cancelled = false
+    childApi
+      .detail(material.childId)
+      .then((d) => !cancelled && setProfile(chosenProfileLines(d.profile, new Set(profileIdsKey.split(',')))))
+      .catch((err: Error) => !cancelled && setError(`Voci del profilo non caricate: ${err.message}`))
+    return () => {
+      cancelled = true
+    }
+  }, [usesProfile, material.childId, profileIdsKey])
+  const profileRequest: ProfileRequest | undefined =
+    usesProfile && material.childId ? { childId: material.childId, profileIds: guide.profileIds } : undefined
 
   const update = (fn: (g: GuideContent) => GuideContent) =>
     setDraft((d) => ({ ...d, content: fn(normalizeGuide(d.content)) as unknown as Record<string, unknown> }))
   const setInput = (patch: Partial<GuideInput>) => update((g) => ({ ...g, input: { ...g.input, ...patch } }))
 
-  const requestText = guideRequestText(guide.input)
+  const requestText = guideRequestText(guide.input, profile ?? [])
   const problems = identifyingProblems(requestText, names)
-  const ready = guide.input.difficulty.trim() !== '' && guide.input.goal.trim() !== ''
+  const ready = guide.input.difficulty.trim() !== '' && guide.input.goal.trim() !== '' && profile !== null
   const hasText = [...guide.famiglia, ...guide.scuola].some((p) => p.text.trim())
 
   async function propose() {
@@ -80,7 +100,7 @@ function GuideEditor({ material, settings, names, onOpen, onClose }: Omit<Props,
     setBusy('proposta')
     setError(null)
     try {
-      const result = await guideApi.propose(guide.input)
+      const result = await guideApi.propose(guide.input, profileRequest)
       update((g) => ({
         ...g,
         famiglia: result.family.map((text) => ({ text, confirmed: false })),
@@ -101,7 +121,7 @@ function GuideEditor({ material, settings, names, onOpen, onClose }: Omit<Props,
     setBusy(`${version}-${index}`)
     setError(null)
     try {
-      const { text } = await guideApi.regeneratePoint(guide.input, version, index, guide[version][index].text)
+      const { text } = await guideApi.regeneratePoint(guide.input, version, index, guide[version][index].text, profileRequest)
       update((g) => ({ ...g, [version]: g[version].map((p, i) => (i === index ? { text, confirmed: false } : p)) }))
     } catch (err) {
       setError((err as Error).message)
@@ -191,7 +211,11 @@ function GuideEditor({ material, settings, names, onOpen, onClose }: Omit<Props,
             <details className="rounded-2xl bg-cream p-4 text-sm">
               <summary className="cursor-pointer font-bold">Cosa viene inviato all’AI</summary>
               <p className="mt-2 whitespace-pre-wrap leading-relaxed">{requestText}</p>
-              <p className="mt-2 text-xs text-muted">Solo questo testo, con le regole fisse della guida. Nessun nome, nessun dato del bambino.</p>
+              <p className="mt-2 text-xs text-muted">
+                {usesProfile
+                  ? 'Solo questo testo, con le regole fisse della guida: le voci del profilo sono quelle scelte nel flusso guidato. Nessun nome.'
+                  : 'Solo questo testo, con le regole fisse della guida. Nessun nome, nessun dato del bambino.'}
+              </p>
             </details>
 
             {problems.length > 0 && (

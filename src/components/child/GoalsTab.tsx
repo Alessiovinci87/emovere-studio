@@ -15,9 +15,11 @@ interface Props {
   /** Numero di schede collegate a ogni obiettivo */
   linkedCount: (goalId: string) => number
   onGoals: (update: (list: Goal[]) => Goal[]) => void
+  /** Flusso guidato "Nuovo materiale" con questo obiettivo già scelto */
+  onNewMaterial: (goalId: string) => void
 }
 
-export function GoalsTab({ childId, goals, isOwner, linkedCount, onGoals }: Props) {
+export function GoalsTab({ childId, goals, isOwner, linkedCount, onGoals, onNewMaterial }: Props) {
   const [creating, setCreating] = useState(false)
   const [open, setOpen] = useState<Record<GoalStatus, boolean>>({ attivo: true, raggiunto: false, archiviato: false })
   const replace = (goal: Goal) => onGoals((list) => list.map((g) => (g.id === goal.id ? goal : g)))
@@ -66,6 +68,7 @@ export function GoalsTab({ childId, goals, isOwner, linkedCount, onGoals }: Prop
                       isOwner={isOwner}
                       onChange={replace}
                       onRemoved={() => onGoals((l) => l.filter((x) => x.id !== g.id))}
+                      onNewMaterial={() => onNewMaterial(g.id)}
                     />
                   ))}
                 </ul>
@@ -96,12 +99,14 @@ function GoalCard({
   isOwner,
   onChange,
   onRemoved,
+  onNewMaterial,
 }: {
   goal: Goal
   linked: number
   isOwner: boolean
   onChange: (g: Goal) => void
   onRemoved: () => void
+  onNewMaterial: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const [dialog, setDialog] = useState<'status' | 'note' | 'edit' | null>(null)
@@ -122,7 +127,7 @@ function GoalCard({
             <span>dal {longDate(goal.startedOn)}</span>
             {goal.closedOn && <span>· chiuso il {longDate(goal.closedOn)}</span>}
             <span>
-              · {linked} {linked === 1 ? 'scheda' : 'schede'}
+              · {linked} {linked === 1 ? 'materiale' : 'materiali'}
             </span>
           </span>
         </span>
@@ -135,6 +140,11 @@ function GoalCard({
         <>
           {goal.description && <p className="whitespace-pre-wrap text-sm leading-relaxed">{goal.description}</p>}
           <div className="flex flex-wrap gap-2">
+            {goal.status === 'attivo' && (
+              <Button small tone="primary" onClick={onNewMaterial}>
+                Nuovo materiale per questo obiettivo
+              </Button>
+            )}
             <Button small tone="soft" onClick={() => setDialog('status')}>
               Cambia stato
             </Button>

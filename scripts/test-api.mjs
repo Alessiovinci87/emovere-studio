@@ -415,7 +415,12 @@ globalThis.fetch = async (url, init) => {
   openaiCalls.push(body)
   const name = body.text.format.name
   const points = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`punto_${i + 1}`, `**Testo** ${i + 1}\n\n\n- riga`]))
-  const value = name === 'guide' ? { famiglia: points, scuola: points } : { testo: 'Punto riscritto' }
+  const value =
+    name === 'guide'
+      ? { famiglia: points, scuola: points }
+      : name === 'sequence'
+        ? { titolo: '**Mi lavo le mani.**', passaggi: [{ frase: 'Apro il rubinetto.', vignetta: 'B01' }, { frase: 'Metto il sapone', vignetta: '' }, { frase: 'Mi asciugo', vignetta: 'B01' }] }
+        : { testo: 'Punto riscritto' }
   return new Response(
     JSON.stringify({
       output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(value) }] }],
@@ -463,6 +468,66 @@ r = await call(guideApi, 'POST', '/api/guide', tb, { input })
 assert.equal(r.status, 429)
 assert.match(r.body.error, /Limite giornaliero/)
 delete process.env.AI_TEXT_LIMIT
+
+// Flusso guidato: voci del profilo (lette e decifrate dal server) e proposta di una sequenza
+r = await call(children, 'POST', '/api/children?resource=profile', tb, { childId: child.id, section: 'interessi', text: 'Ama i treni', source: 'genitori', recordedOn: '2026-10-01' })
+const pInterest = r.body.entry
+r = await call(children, 'POST', '/api/children?resource=profile', tb, { childId: child.id, section: 'comunicazione', text: 'Forse   evita le richieste lunghe', source: 'ipotesi', recordedOn: '2026-10-02' })
+const pHypo = r.body.entry
+r = await call(children, 'POST', '/api/children?resource=profile', tb, { childId: child.id, section: 'note', text: 'Chiamare il 333 1234567', source: 'osservato', recordedOn: '2026-10-02' })
+const pPhone = r.body.entry
+const calls0 = openaiCalls.length
+r = await call(guideApi, 'POST', '/api/guide', tb, { input, profileIds: [pInterest.id] })
+assert.equal(r.status, 400, 'voci del profilo solo con il bambino')
+r = await call(guideApi, 'POST', '/api/guide', tb, { input, childId: child.id, profileIds: [pPhone.id] })
+assert.equal(r.status, 400, 'anche le voci del profilo si controllano')
+assert.match(r.body.error, /telefono/)
+r = await call(guideApi, 'POST', '/api/guide', tc, { input, childId: child.id, profileIds: [pInterest.id] })
+assert.ok(r.status === 404 || r.status === 403, 'bambino di un altro centro')
+assert.equal(openaiCalls.length, calls0, 'nessuna chiamata bloccata è arrivata all’AI')
+r = await call(guideApi, 'POST', '/api/guide', tb, { input, childId: child.id, profileIds: [pInterest.id, pHypo.id, entry.id] })
+assert.equal(r.status, 200, JSON.stringify(r.body))
+assert.equal(
+  openaiCalls.at(-1).input[1].content,
+  [
+    'Difficoltà osservata: Lancia gli oggetti quando deve smettere di giocare',
+    'Obiettivo: Accettare la fine del gioco',
+    "Fascia d'età: 3-5 anni",
+    'Linguaggio per la famiglia: semplice',
+    'Dal profilo del bambino (voci scelte dall’educatrice):',
+    '- Comunicazione e comprensione (ipotesi da verificare): Forse evita le richieste lunghe',
+    '- Interessi (riferito dai genitori): Ama i treni',
+  ].join('\n'),
+  'voci nell’ordine delle sezioni, la voce archiviata non va',
+)
+const sequence = { goal: 'Lavarsi le mani da solo', situation: 'Prima di pranzo va al bagno ma si distrae', ageBand: '3-5', comprehension: 'frasi_brevi', steps: 4, context: 'scuola', character: 'bambino' }
+r = await call(guideApi, 'POST', '/api/guide', tb, { sequence: { ...sequence, steps: 5 } })
+assert.equal(r.status, 400, 'numero di passaggi non previsto')
+r = await call(guideApi, 'POST', '/api/guide', tb, { sequence, childId: child.id, profileIds: [pInterest.id] })
+assert.equal(r.status, 200, JSON.stringify(r.body))
+assert.deepEqual(r.body, {
+  title: 'Mi lavo le mani',
+  steps: [
+    { text: 'Apro il rubinetto', code: 'B01' },
+    { text: 'Metto il sapone', code: null },
+    { text: 'Mi asciugo', code: 'B01' },
+    { text: '', code: null },
+  ],
+})
+const seqCall = openaiCalls.at(-1)
+assert.equal(seqCall.text.format.name, 'sequence')
+assert.ok(seqCall.text.format.schema.properties.passaggi.items.properties.vignetta.enum.includes('A01'), 'vignette del catalogo')
+assert.match(seqCall.input[0].content, /A01: Mi sveglio/)
+assert.match(seqCall.input[1].content, /^Obiettivo: Lavarsi le mani da solo\nSituazione: Prima di pranzo/)
+assert.match(seqCall.input[1].content, /Interessi \(riferito dai genitori\): Ama i treni$/)
+const flowLog = await sql`select child_id, fields_sent from app.ai_requests where model = 'gpt-6.1-sol' order by created_at desc limit 2`
+assert.equal(flowLog[0].child_id, child.id)
+assert.deepEqual(flowLog[0].fields_sent, ['obiettivo', 'situazione', 'contesto', 'fascia_eta', 'comprensione', 'passaggi', 'personaggio', 'profilo:interessi'])
+assert.deepEqual(flowLog[1].fields_sent, ['difficolta', 'obiettivo', 'fascia_eta', 'linguaggio', 'profilo:comunicazione', 'profilo:interessi'])
+const aiRead = await sql`select details from app.audit_log where entity = 'child_profile_entries' and action = 'legge' order by id desc limit 1`
+assert.deepEqual(aiRead[0].details, { ai: true, campi: ['profilo:interessi'] })
+assert.ok(!JSON.stringify(flowLog).includes('treni'), 'mai il contenuto nel registro')
+
 // Senza centro: niente
 r = await call(guideApi, 'POST', '/api/guide', await token('00000000-0000-0000-0000-0000000000dd'), { input })
 assert.equal(r.status, 403)
@@ -482,7 +547,7 @@ r = await call(children, 'GET', `/api/children?id=${child.id}&export=1`, ta)
 assert.equal(r.status, 200, JSON.stringify(r.body))
 assert.equal(r.body.child.pseudonym, 'Stella')
 assert.equal(r.body.child.realName, null)
-assert.equal(r.body.profile[0].text, 'Dinosauri e treni', 'anche le voci archiviate')
+assert.ok(r.body.profile.some((p) => p.text === 'Dinosauri e treni' && p.archivedAt), 'anche le voci archiviate')
 assert.equal(r.body.goals[0].events[1].note, 'Tre settimane di fila')
 const forExport = r.body.materials.find((m) => m.title === 'Per l’export')
 assert.equal(forExport.notes, 'nota')

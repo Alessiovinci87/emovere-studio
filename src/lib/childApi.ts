@@ -70,11 +70,8 @@ export const childApi = {
   /** Eliminazione definitiva (solo titolare) */
   removeGoal: (goalId: string) => call<{ ok: true }>(`/api/children?resource=goals&id=${id(goalId)}`, send('DELETE')),
 
-  /** Obiettivi collegati alle schede del bambino (id materiale → id obiettivi) */
-  goalLinks: async (childId: string) => {
-    const list = (await call<{ materials: ServerMaterial[] }>(`/api/materials?child=${id(childId)}`)).materials
-    return new Map(list.map((m) => [m.id, m.goalIds]))
-  },
+  /** Materiali del bambino sul server (schede e guide), con gli obiettivi collegati (goalIds) */
+  materials: async (childId: string) => (await call<{ materials: ServerMaterial[] }>(`/api/materials?child=${id(childId)}`)).materials,
   /** Sostituisce i collegamenti; gli eventi aggiunti allo storico tornano in goalEvents */
   setGoals: (materialId: string, goalIds: string[]) =>
     call<{ material: ServerMaterial; goalEvents: { goalId: string; event: GoalEvent }[] }>(

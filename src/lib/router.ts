@@ -20,13 +20,15 @@ export type Route =
   | { name: 'scheda'; id: string | null }
   /** Guida per genitori e scuola (sul server) */
   | { name: 'guida'; id: string }
+  /** Flusso guidato "Nuovo materiale", con bambino e obiettivo già scelti (facoltativi) */
+  | { name: 'nuovo'; childId?: string; goalId?: string }
 
 /** Sezioni della navigazione principale */
 export type Section = 'oggi' | 'bambini' | 'crea' | 'libreria' | 'impostazioni'
 
 export function sectionOf(route: Route): Section | null {
   if (route.name === 'cartella' || route.name === 'cestino') return 'bambini'
-  if (route.name === 'scheda' || route.name === 'guida') return null
+  if (route.name === 'scheda' || route.name === 'guida' || route.name === 'nuovo') return null
   return route.name
 }
 
@@ -42,6 +44,12 @@ export function toPath(route: Route): string {
       return `/scheda/${route.id ? encodeURIComponent(route.id) : 'bozza'}`
     case 'guida':
       return `/guida/${encodeURIComponent(route.id)}`
+    case 'nuovo': {
+      const query = new URLSearchParams()
+      if (route.childId) query.set('bambino', route.childId)
+      if (route.goalId) query.set('obiettivo', route.goalId)
+      return query.toString() ? `/nuovo?${query}` : '/nuovo'
+    }
     default:
       return `/${route.name}`
   }
@@ -67,6 +75,11 @@ export function parsePath(pathname: string, search = ''): Route {
       return { name: 'scheda', id: !second || second === 'bozza' ? null : second }
     case 'guida':
       return second ? { name: 'guida', id: second } : { name: 'crea' }
+    case 'nuovo': {
+      const query = new URLSearchParams(search)
+      const childId = query.get('bambino') ?? undefined
+      return { name: 'nuovo', childId, goalId: childId ? (query.get('obiettivo') ?? undefined) : undefined }
+    }
     default:
       return { name: 'oggi' }
   }

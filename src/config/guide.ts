@@ -1,6 +1,8 @@
 // Guida per genitori e scuola (specifica di Martina, sezione 10), condivisa tra app e funzione /api/guide.
 // I 10 punti e le regole del testo sono fissi: il prompt lo compone solo il server, con queste regole.
 
+import { profileRequestText, type ProfileLine } from './flow.js'
+
 export type GuideVersion = 'famiglia' | 'scuola'
 export type AgeBand = '3-5' | '6-8'
 export type FamilyLanguage = 'semplice' | 'articolato'
@@ -54,14 +56,18 @@ export function isGuideInput(value: unknown): value is GuideInput {
   )
 }
 
-/** Testo esattamente come viene inviato all'AI (anteprima nell'app = contenuto della richiesta). */
-export function guideRequestText(input: GuideInput): string {
+/**
+ * Testo esattamente come viene inviato all'AI (anteprima nell'app = contenuto della richiesta).
+ * `profile`: voci del profilo scelte nel flusso guidato (guida di un bambino).
+ */
+export function guideRequestText(input: GuideInput, profile: ProfileLine[] = []): string {
   return [
     `Difficoltà osservata: ${input.difficulty.trim()}`,
     `Obiettivo: ${input.goal.trim()}`,
     input.situations.trim() ? `Situazioni in cui si presenta: ${input.situations.trim()}` : null,
     `Fascia d'età: ${AGE_BANDS[input.ageBand]}`,
     `Linguaggio per la famiglia: ${FAMILY_LANGUAGES[input.familyLanguage].toLowerCase()}`,
+    profileRequestText(profile),
   ]
     .filter(Boolean)
     .join('\n')
@@ -102,7 +108,7 @@ function escapeRegExp(text: string): string {
 /** Istruzioni fisse del modello di testo (in italiano: la guida è in italiano). */
 export const GUIDE_INSTRUCTIONS = `Sei un assistente per un'Educatrice Professionale Socio-Sanitaria che lavora con bambini di 3-8 anni (autismo, ADHD, disturbo oppositivo-provocatorio). Prepari la BOZZA di una guida pratica che lei rivedrà e correggerà prima di consegnarla.
 
-Ricevi: una difficoltà osservata, un obiettivo, eventuali situazioni, la fascia d'età, il linguaggio per la famiglia.
+Ricevi: una difficoltà osservata, un obiettivo, eventuali situazioni, la fascia d'età, il linguaggio per la famiglia ed eventuali voci del profilo del bambino, con la loro provenienza.
 Scrivi due versioni della guida, ognuna in 10 punti, in italiano:
 1. Obiettivo di lavoro
 2. Descrizione osservabile della difficoltà
@@ -122,6 +128,7 @@ Regole fisse:
 - È una bozza da rivedere: indicazioni personalizzabili, mai protocolli universali né garanzie di risultato.
 - Non dedurre la funzione del comportamento da una descrizione isolata. Il punto 4 inizia sempre con "Da verificare con l'osservazione:" e propone più ipotesi possibili, mai una sola certezza.
 - Le emozioni del bambino sono possibilità plausibili, mai certezze.
+- Le voci del profilo marcate come ipotesi restano ipotesi da verificare: non presentarle come fatti. Usa interessi e rinforzatori del profilo negli esempi quando aiutano.
 - Nessuna diagnosi, nessun farmaco, nessuna indicazione di trattamento clinico, nessuna punizione, nessuna minaccia, nessuna privazione come strategia. Linguaggio positivo: cosa fare, non solo cosa evitare.
 - Descrizioni osservabili: azioni che si vedono e si possono contare, non etichette.
 - Adatta esempi, frasi e supporti visivi alla fascia d'età indicata.

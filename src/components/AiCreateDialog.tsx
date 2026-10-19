@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import {
   AI_ADULTS,
   AI_EXPRESSIONS,
+  AI_IMAGE_COST_ESTIMATE,
   AI_OUTFITS,
   AI_SETTINGS,
   type AiAdult,
@@ -18,19 +19,24 @@ import { Button, inputClass } from './ui'
 interface Props {
   onSaved: (scene: Scene) => void
   onClose: () => void
+  /** Valori iniziali (es. dal flusso guidato: frase del passaggio e personaggio della scheda) */
+  initial?: { description?: string; character?: Character }
 }
+
+/** Costo stimato di una vignetta (2 immagini), in dollari con la virgola */
+const costText = (['min', 'max'] as const).map((k) => (AI_IMAGE_COST_ESTIMATE[k] * 2).toFixed(2).replace('.', ',')).join('-')
 
 type Step = { name: 'form' } | { name: 'generating' } | { name: 'preview'; preview: AiPreview } | { name: 'saving'; preview: AiPreview }
 
 /** Crea una nuova vignetta con AI: versione bambina e bambino, anteprima, salvataggio in libreria. */
-export function AiCreateDialog({ onSaved, onClose }: Props) {
+export function AiCreateDialog({ onSaved, onClose, initial }: Props) {
   const [status, setStatus] = useState<AiStatus | null>(null)
-  const [character, setCharacter] = useState<Character>('bambina')
+  const [character, setCharacter] = useState<Character>(initial?.character ?? 'bambina')
   const [setting, setSetting] = useState<AiSetting>('cameretta')
   const [outfit, setOutfit] = useState<AiOutfit>('casa')
   const [expression, setExpression] = useState<AiExpression>('serena')
   const [adult, setAdult] = useState<AiAdult | null>(null)
-  const [description, setDescription] = useState('')
+  const [description, setDescription] = useState(initial?.description ?? '')
   const [step, setStep] = useState<Step>({ name: 'form' })
   const [error, setError] = useState<string | null>(null)
   // Titoli e tag confermati al salvataggio
@@ -157,8 +163,9 @@ export function AiCreateDialog({ onSaved, onClose }: Props) {
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line/70 pt-5">
               <p className="text-sm text-muted">
                 {status
-                  ? `${status.period === 'mese' ? 'Questo mese' : 'Oggi'}: ${status.used} di ${status.limit} immagini (ogni vignetta ne usa 2).`
-                  : 'Controllo il limite…'}
+                  ? `${status.period === 'mese' ? 'Questo mese' : 'Oggi'}: ${status.used} di ${status.limit} immagini.`
+                  : 'Controllo il limite…'}{' '}
+                Ogni vignetta usa 2 immagini, costo stimato {costText} $.
               </p>
               <div className="flex gap-2">
                 <Button onClick={onClose} disabled={busy}>

@@ -34,6 +34,8 @@ import { TodayView } from './views/TodayView'
 import { TrashView } from './views/TrashView'
 import { ChildView } from './views/ChildView'
 import { GenericSheetsView } from './views/GenericSheetsView'
+import { NewMaterialView } from './views/NewMaterialView'
+import { childApi } from './lib/childApi'
 import type { SheetActions } from './components/child/MaterialsTab'
 
 type FolderAction = { mode: 'save' } | { mode: 'duplicate'; sheetId: string } | { mode: 'move'; sheetId: string }
@@ -147,6 +149,12 @@ function Workspace({ session, server, data }: { session: Session; server: Return
     if (route.name === 'scheda' && !route.id) navigate({ name: 'oggi' }, { replace: true })
   }, [route, navigate])
 
+  /** Nomi da non inviare mai all'AI: pseudonimi e nomi sulle schede */
+  const childNames = useMemo(
+    () => [...data.folders.flatMap((f) => [f.name, f.materialName ?? '']), ...data.sheets.map((s) => s.childName)].filter((n) => n.trim()),
+    [data],
+  )
+
   /** Tutte le schede, anche quelle senza bambino */
   const allSheets = data.sheets
   const due = useMemo(() => dueReminders(data.sheets, data.folders), [data])
@@ -245,6 +253,20 @@ function Workspace({ session, server, data }: { session: Session; server: Return
     const created = { ...make(store.folderChildName(folder)), folderId, openedAt: now }
     setData(store.upsertSheet(d, created))
     navigate({ name: 'scheda', id: created.id }, { replace: true })
+  }
+
+  /** Flusso guidato: scheda nuova nel bambino (o generica), collegata all'obiettivo appena è sul server */
+  function createFromFlow(make: (childName: string) => Sheet, childId: string | null, goalId: string | null) {
+    const folder = childId ? data.folders.find((f) => f.id === childId) : undefined
+    const created = { ...make(folder ? store.folderChildName(folder) : ''), folderId: folder?.id ?? null, openedAt: Date.now() }
+    setData((d) => store.upsertSheet(d, created))
+    navigate({ name: 'scheda', id: created.id }, { replace: true })
+    if (folder && goalId) {
+      server
+        .whenSheetSaved(created.id, folder.id)
+        .then(() => childApi.setGoals(created.id, [goalId]))
+        .catch((err: Error) => setToast(`Scheda creata, ma non collegata all’obiettivo: ${err.message}`))
+    }
   }
 
   function deleteFolder(id: string) {
@@ -425,7 +447,8 @@ Non si può annullare.`)) return
             onRename={(name) => setData((d) => store.updateFolder(d, folder.id, { name }))}
             onNotes={(notes) => setData((d) => store.updateFolder(d, folder.id, { notes }))}
             onTrash={() => deleteFolder(folder.id)}
-            onNewSheet={() => navigate({ name: 'crea', folderId: folder.id })}
+            onNewSheet={(goalId) => navigate({ name: 'nuovo', childId: folder.id, goalId })}
+            onOpenGuide={(id) => navigate({ name: 'guida', id })}
             // Già eliminato sul server: si toglie dai dati dell'app (il cestino risponde 404, va bene)
             onDeleted={() => {
               deleteFolder(folder.id)
@@ -457,6 +480,7 @@ Non si può annullare.`)) return
             onCreatePreset={createFromPreset}
             guidesOnline={!!session.account?.organization}
             onOpenGuide={(id) => navigate({ name: 'guida', id })}
+            onGuided={() => navigate({ name: 'nuovo', childId: route.folderId })}
           />
         )
       case 'libreria':
@@ -510,11 +534,29 @@ Non si può annullare.`)) return
 
   return (
     <>
-      {route.name === 'guida' ? (
+      {route.name === 'nuovo' ? (
+        <NewMaterialView
+          key={`${route.childId ?? ''}-${route.goalId ?? ''}`}
+          folders={data.folders}
+          initialChildId={route.childId}
+          initialGoalId={route.goalId}
+          names={childNames}
+          uppercaseDefault={settings.uppercaseDefault}
+          whenFolderSaved={server.whenFolderSaved}
+          onClose={() => back(route.childId ? { name: 'cartella', id: route.childId } : { name: 'crea' })}
+          onBlank={(childId) => navigate({ name: 'crea', folderId: childId ?? undefined }, { replace: true })}
+          onCreateSheet={createFromFlow}
+          onOpenGuide={(id, warning) => {
+            navigate({ name: 'guida', id }, { replace: true })
+            if (warning) setToast(warning)
+          }}
+          onAiScene={(scene) => applyAiScenes([...aiScenes, scene])}
+        />
+      ) : route.name === 'guida' ? (
         <GuideScreen
           id={route.id}
           settings={settings}
-          names={[...data.folders.map((f) => f.name), ...data.sheets.map((s) => s.childName)].filter((n) => n.trim())}
+          names={childNames}
           onOpen={(id) => navigate({ name: 'guida', id }, { replace: true })}
           onClose={() => back({ name: 'crea' })}
         />

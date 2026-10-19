@@ -27,7 +27,8 @@
       "maxDuration": 300
     },
     "api/guide.ts": {
-      "maxDuration": 120
+      "maxDuration": 120,
+      "includeFiles": "src/data/catalog.json"
     }
   }
 }

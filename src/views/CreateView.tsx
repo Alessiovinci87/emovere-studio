@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Page, SectionHeader } from '../components/AppShell'
 import { CharacterToggle } from '../components/CharacterToggle'
 import { GuidesSection } from '../components/GuidesSection'
+import { SparkleIcon } from '../components/Icons'
 import { FolderPicker } from '../components/Pickers'
 import { catalog, sceneThumb } from '../lib/catalog'
 import { availablePresets, genderize, type Preset } from '../lib/presets'
@@ -20,12 +21,14 @@ interface Props {
   /** Guide sul server: servono login e centro */
   guidesOnline: boolean
   onOpenGuide: (id: string) => void
+  /** Flusso guidato "Nuovo materiale" (dall'obiettivo alla proposta) */
+  onGuided: () => void
 }
 
 type Chosen = { kind: 'template'; template: Template } | { kind: 'preset'; preset: Preset }
 
 /** Schede pronte e galleria dei modelli vuoti. Scelto, si sceglie la cartella (o bozza) e si apre l'editor. */
-export function CreateView({ folders, folderId, onBack, onCreate, onCreatePreset, guidesOnline, onOpenGuide }: Props) {
+export function CreateView({ folders, folderId, onBack, onCreate, onCreatePreset, guidesOnline, onOpenGuide, onGuided }: Props) {
   const [chosen, setChosen] = useState<Chosen | null>(null)
   const [character, setCharacter] = useState<Character>('bambina')
   const folder = folders.find((f) => f.id === folderId)
@@ -38,6 +41,22 @@ export function CreateView({ folders, folderId, onBack, onCreate, onCreatePreset
         subtitle={folder ? `Nuova scheda per ${folder.name}.` : 'Parti da una scheda pronta o da un modello vuoto.'}
         onBack={onBack}
       />
+
+      <button
+        onClick={onGuided}
+        className="mb-10 flex w-full items-center gap-5 rounded-3xl bg-accent-soft p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+      >
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-accent text-white">
+          <SparkleIcon className="h-7 w-7" />
+        </span>
+        <span className="flex flex-col gap-1">
+          <span className="text-lg font-bold">Nuovo materiale guidato</span>
+          <span className="text-sm leading-snug text-muted">
+            Dall’obiettivo e dalla situazione, con i dati del profilo che scegli tu: l’AI propone una sequenza o una guida per
+            genitori e scuola, da rivedere.
+          </span>
+        </span>
+      </button>
 
       {!folder && <GuidesSection online={guidesOnline} onOpen={onOpenGuide} />}
 
