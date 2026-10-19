@@ -232,9 +232,33 @@ select pg_temp.expect_error($q$select * from app.materials$q$, '42501');
 reset role;
 
 -- ——— Cestino ———
+-- Il registro senza utente lo scrive solo la pulizia automatica; emovere_app non la può lanciare
+set role emovere_app;
+select set_config('app.user_id', '00000000-0000-0000-0000-00000000000a', false);
+select pg_temp.expect_error(format(
+  $q$insert into app.audit_log (org_id, action, entity, user_id) values (%L, 'elimina', 'x', null)$q$,
+  current_setting('t.org1')), '42501');
+select pg_temp.expect_error($q$select * from private.purge_deleted()$q$, '42501');
+reset role;
+
+with x as (
+  insert into app.materials (org_id, child_id, kind, title, content, deleted_at)
+  values (current_setting('t.org1')::uuid, current_setting('t.child1')::uuid, 'scheda', 'vecchia', '{}', now() - interval '40 days')
+  returning id
+) select set_config('t.matOld', id::text, false) from x;
+insert into app.materials (org_id, child_id, kind, title, content, deleted_at)
+  values (current_setting('t.org1')::uuid, current_setting('t.child1')::uuid, 'scheda', 'recente', '{}', now() - interval '5 days');
 update app.children set deleted_at = now() - interval '31 days' where id = current_setting('t.child2')::uuid;
-select pg_temp.ok((select children_deleted = 1 from private.purge_deleted()), 'cestino svuotato dopo 30 giorni');
+select pg_temp.ok((select children_deleted = 1 and materials_deleted = 1 from private.purge_deleted()), 'cestino svuotato dopo 30 giorni');
 select pg_temp.ok((select count(*) from app.materials where id = current_setting('t.mat2')::uuid) = 0, 'materiali del bambino eliminati');
+select pg_temp.ok((select count(*) from app.materials where title = 'recente') = 1, 'nel cestino da 5 giorni: resta');
+select pg_temp.ok((select count(*) from app.children where id = current_setting('t.child1')::uuid) = 1, 'bambino attivo: resta');
+select pg_temp.ok((
+  select count(*) from app.audit_log
+  where user_id is null and details ->> 'automatico' = 'true' and action = 'elimina'
+    and ((entity = 'materials' and entity_id = current_setting('t.matOld')::uuid)
+      or (entity = 'children' and entity_id = current_setting('t.child2')::uuid))
+) = 2, 'pulizia automatica nel registro, senza utente');
 
 -- Eliminare un centro elimina tutto, senza bloccarsi sul "titolare unico"
 delete from app.organizations where id = current_setting('t.org1')::uuid;

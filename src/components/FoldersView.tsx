@@ -16,10 +16,11 @@ interface Props {
   onOpenGeneric: () => void
   onOpenFolder: (id: string) => void
   onCreateFolder: (name: string) => void
+  onOpenTrash: () => void
 }
 
 /** Schermata principale: le cartelle dei bambini con i contatori per stato. */
-export function FoldersView({ testData, folders, sheets, genericCount, onOpenGeneric, onOpenFolder, onCreateFolder }: Props) {
+export function FoldersView({ testData, folders, sheets, genericCount, onOpenGeneric, onOpenFolder, onCreateFolder, onOpenTrash }: Props) {
   const [creating, setCreating] = useState(false)
   const sorted = [...folders].sort((a, b) => a.name.localeCompare(b.name, 'it'))
 
@@ -76,6 +77,10 @@ export function FoldersView({ testData, folders, sheets, genericCount, onOpenGen
           </span>
         </button>
       )}
+
+      <div className="mt-6 flex justify-end">
+        <Button onClick={onOpenTrash}>🗑 Cestino</Button>
+      </div>
 
       {creating && (
         <FolderNameDialog

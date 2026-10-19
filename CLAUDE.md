@@ -45,7 +45,7 @@ Strumento per comporre schede visive (routine, storie sociali, prima/poi, scelte
 - Eliminazioni: gli operatori usano il cestino (`trashed`); eliminazione definitiva di bambini, obiettivi e materiali solo del titolare
 - `legacyId` in creazione rende l'importazione ripetibile senza doppioni (punto 5)
 - Registro: letture del dettaglio di un bambino o di un suo materiale e tutte le modifiche finiscono in `audit_log` (solo id e nomi dei campi)
-- Funzioni Vercel: oggi 10 file in `api/`. Il piano Hobby ha un limite al numero di funzioni per deploy: raggruppare per risorsa (`?resource=`, `?action=`) invece di creare un file per operazione
+- Funzioni Vercel: oggi 11 file in `api/`. Il piano Hobby ha un limite al numero di funzioni per deploy: raggruppare per risorsa (`?resource=`, `?action=`) invece di creare un file per operazione
 - Punto 4, l'app usa il server (`src/lib/useServerData.ts`, `src/lib/sync.ts`, conversioni in `src/lib/serverData.ts`):
   - L'app lavora ancora su `StoreData` con le operazioni pure di `store.ts`; il motore `ServerSync` confronta i dati con l'ultima versione salvata e manda solo le differenze (cartella → `/api/children`, scheda → `/api/materials`; eliminare = cestino). Gli id li genera l'app (`newId`), il server li accetta: un nuovo tentativo dopo una risposta persa non crea doppioni (409 → già creato)
   - Cartella = bambino: nome = pseudonimo, appunti cifrati (`children.notes_enc`), "Nome sulle schede" = `material_name` cifrato, uno per bambino: cambiandolo da una scheda cambia in tutte le sue schede (`store.setChildName`)
@@ -61,6 +61,14 @@ Strumento per comporre schede visive (routine, storie sociali, prima/poi, scelte
   - Dopo l'importazione (`emovere.imported.v1`) i dati restano nel browser finché in Impostazioni non si sceglie "Elimina la copia da questo browser"
 - Prima di ogni deploy che cambia lo schema: applicare le migrazioni (`npx supabase db push`), altrimenti le funzioni falliscono
 - Collaudo in locale con il server di prova (`scripts/dev-api.mjs`): PostgreSQL locale con `supabase/tests/stub_supabase.sql` e le migrazioni nel database `DEV_DATABASE_URL` (predefinito `postgres://postgres@localhost:5432/emovere_dev`); `npm run dev:api` (funzioni vere, login simulato, titolare di prova) e in un altro terminale `npm run dev:server` (Vite in modo `devapi`, `/api` → porta 8787). Senza server, `npm run dev` mostra "Serve il server"
+
+## Cestino, esportazione, registro, pulizia (Fase 0, punto 6)
+- Cestino (`/cestino`, da Bambini → "Cestino", `src/views/TrashView.tsx`): bambini e materiali eliminati, con i giorni che restano (`trashDaysLeft`). Tutti i membri ripristinano; "Elimina per sempre" solo il titolare. Un materiale di un bambino nel cestino si ripristina solo dopo il bambino. Dopo un ripristino l'app ricarica i dati dal server
+- Nella cartella del bambino il titolare ha "Dati del bambino" (`src/components/ChildDataActions.tsx`):
+  - "Esporta i dati del bambino": `GET /api/children?id=…&export=1` (solo titolare, registrato come `esporta`) restituisce tutto decifrato, anche ciò che è nel cestino; l'app crea uno ZIP (`src/lib/childExport.ts`, ZIP senza compressione in `src/lib/zip.ts`) con `dati.json`, `LEGGIMI.txt`, il PDF WhatsApp di ogni scheda e delle guide con tutti i punti confermati. Nome `emovere-dati_{codice}_{data}.zip`, mai nomi
+  - "Elimina bambino": eliminazione definitiva immediata (senza cestino), si conferma scrivendo il codice B-0001; nel registro resta solo l'id
+- Registro degli accessi: Impostazioni → "Registro degli accessi" (solo titolare, `src/components/AuditLogDialog.tsx`), filtri per bambino, persona, azione; `GET /api/organization?resource=audit` (100 righe per volta, `before` per le precedenti)
+- Pulizia notturna: Vercel Cron (`crons` in `vercel.json`, ogni notte alle 2 UTC) chiama `GET /api/organization?action=purge` con `Authorization: Bearer CRON_SECRET` (il middleware la lascia passare senza sessione né password, la funzione ricontrolla). Esegue `private.purge_deleted(30)` come ruolo del collegamento e scrive nel registro righe senza utente (`user_id` null, `details.automatico`) = "Pulizia automatica". Variabile su Vercel: `CRON_SECRET` (Sensitive, almeno 16 caratteri casuali); senza, la pulizia risponde 503
 
 ## Database (Supabase)
 - Migrazioni in `supabase/migrations/` (versionate), configurazione CLI in `supabase/config.toml`. Si applicano con `npx supabase db push` dopo `npx supabase link --project-ref vrlryycceswltabasogi`. Pooler (per `DATABASE_URL`): `aws-0-eu-west-1.pooler.supabase.com`, utente `postgres.vrlryycceswltabasogi`; la password del database non va mai in chat né nel codice
@@ -141,6 +149,7 @@ Prototipo da far provare a Martina in 1-2 settimane per capire se vale la pena. 
   - `AI_TEXT_LIMIT`: guide (e punti rigenerati) per centro al giorno (senza variabile: 40)
   - Le modifiche alle variabili valgono dal deploy successivo (Redeploy)
   - `APP_PASSWORD`: la password dell'app (vedi "Deploy")
+  - `CRON_SECRET`: segreto della pulizia notturna del cestino (vedi "Cestino, esportazione, registro, pulizia")
 
 ## Guida per genitori e scuola
 - Crea → "Guide per genitori e scuola" (`src/components/GuidesSection.tsx`): nuova guida ed elenco; editor a schermo intero `/guida/{id}` (`src/views/GuideEditor.tsx`). Serve il login: le guide stanno sul server come materiali generici di tipo `guida` (`src/lib/guide.ts`)

@@ -35,6 +35,11 @@ export async function asUser<T>(userId: string, run: (tx: Tx) => Promise<T>): Pr
   }
 }
 
+/** Operazioni di sistema senza utente (pulizia notturna): ruolo del collegamento, nessuna RLS da utente. */
+export async function asSystem<T>(run: (tx: Tx) => Promise<T>): Promise<T> {
+  return (await client().begin(run)) as T
+}
+
 export interface Membership {
   orgId: string
   role: 'titolare' | 'operatore'

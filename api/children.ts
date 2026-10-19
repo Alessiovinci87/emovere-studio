@@ -1,6 +1,7 @@
 // /api/children — bambini, nome reale, profilo e obiettivi. I campi sensibili sono cifrati (vedi keys.ts).
 //   GET                         → { children }  (con contatori dei materiali per stato; ?trash=1 → cestino)
 //   GET ?id=                    → { child, profile, goals }  (lettura registrata in audit_log)
+//   GET ?id=&export=1           → tutti i dati del bambino, decifrati (solo titolare; registrato come "esporta")
 //   POST   { pseudonym, … }     → { child, existing? }  (legacyId: importazione senza doppioni; id facoltativo, generato dall'app)
 //   PATCH  { id, … }            → { child }  (trashed: cestino/ripristino; realName solo titolare)
 //   DELETE ?id=                 → eliminazione definitiva (solo titolare)
@@ -153,6 +154,10 @@ export function GET(request: Request): Promise<Response> {
           return { children: rows.map((row) => childOut(row, s, { counts: row.counts })) }
         }
 
+        if (params.get('export') === '1') {
+          if (role !== 'titolare') throw new UserError('Esportare i dati di un bambino è riservato al titolare.', 403)
+          return exportChild(tx, orgId, uuid(id), s)
+        }
         const [row] = await tx<ChildRow[]>`
           select ${tx.unsafe(CHILD_COLUMNS)} from app.children where id = ${uuid(id)} and org_id = ${orgId}`
         if (!row) throw notFound()
@@ -475,6 +480,118 @@ async function updateGoal(userId: string, body: Body) {
     })
     return { goal: goalOut(row, s) }
   })
+}
+
+// ——— Esportazione (diritto di accesso e portabilità) ———
+
+const OBSERVATION_TEXTS = [
+  ['antecedent_enc', 'antecedent'],
+  ['behavior_enc', 'behavior'],
+  ['consequence_enc', 'consequence'],
+  ['material_response_enc', 'materialResponse'],
+  ['operator_notes_enc', 'operatorNotes'],
+  ['interpretation_enc', 'interpretation'],
+] as const
+
+/** Tutto ciò che il centro conserva sul bambino (anche nel cestino), con i campi decifrati. */
+async function exportChild(tx: Tx, orgId: string, id: string, s: Sealer) {
+  const [row] = await tx<ChildRow[]>`
+    select ${tx.unsafe(CHILD_COLUMNS)} from app.children where id = ${id} and org_id = ${orgId}`
+  if (!row) throw notFound()
+  const [identity] = await tx<{ real_name_enc: string | null }[]>`
+    select real_name_enc from app.child_identity where child_id = ${id}`
+  const entries = await tx<EntryRow[]>`
+    select ${tx.unsafe(ENTRY_COLUMNS)} from app.child_profile_entries where child_id = ${id} order by section, recorded_on, created_at`
+  const goals = await tx<GoalRow[]>`select ${tx.unsafe(GOAL_COLUMNS)} from app.goals where child_id = ${id} order by started_on`
+  const events = await tx<
+    { id: string; goal_id: string; kind: string; from_status: string | null; to_status: string | null; note_enc: string | null; created_at: Date }[]
+  >`
+    select e.id, e.goal_id, e.kind, e.from_status, e.to_status, e.note_enc, e.created_at
+    from app.goal_events e join app.goals g on g.id = e.goal_id where g.child_id = ${id} order by e.created_at`
+  const materials = await tx<
+    {
+      id: string
+      kind: string
+      title: string
+      status: string
+      is_generic: boolean
+      content: Record<string, unknown>
+      notes_enc: string | null
+      reminder_date: string | null
+      reminder_kind: string | null
+      reminder_done: boolean
+      created_at: Date
+      updated_at: Date
+      deleted_at: Date | null
+      goal_ids: string[]
+    }[]
+  >`
+    select m.id, m.kind, m.title, m.status, m.is_generic, m.content, m.notes_enc, m.reminder_date::text, m.reminder_kind,
+           m.reminder_done, m.created_at, m.updated_at, m.deleted_at,
+           coalesce((select array_agg(g.goal_id) from app.material_goals g where g.material_id = m.id), '{}') as goal_ids
+    from app.materials m where m.child_id = ${id} order by m.created_at`
+  const versions = await tx<{ material_id: string; version_no: number; title: string; content: unknown; reason: string; created_at: Date }[]>`
+    select v.material_id, v.version_no, v.title, v.content, v.reason, v.created_at
+    from app.material_versions v join app.materials m on m.id = v.material_id
+    where m.child_id = ${id} order by v.material_id, v.version_no`
+  const observations = await tx<Record<string, unknown>[]>`
+    select id, goal_id, material_id, observed_at, context, prompt_level, frequency, duration_seconds, created_at,
+           ${tx.unsafe(OBSERVATION_TEXTS.map(([col]) => col).join(', '))}
+    from app.observations where child_id = ${id} order by observed_at`
+
+  await audit(tx, { orgId, action: 'esporta', entity: 'children', entityId: id, childId: id })
+  return {
+    exportedAt: new Date(),
+    child: {
+      ...childOut(row, s),
+      realName: s.open(identity?.real_name_enc ?? null, 'child_identity', 'real_name_enc', id),
+    },
+    profile: entries.map((e) => entryOut(e, s)),
+    goals: goals.map((g) => ({
+      ...goalOut(g, s),
+      events: events
+        .filter((e) => e.goal_id === g.id)
+        .map((e) => ({
+          kind: e.kind,
+          fromStatus: e.from_status,
+          toStatus: e.to_status,
+          note: s.open(e.note_enc, 'goal_events', 'note_enc', e.id),
+          createdAt: e.created_at,
+        })),
+    })),
+    materials: materials.map((m) => ({
+      id: m.id,
+      kind: m.kind,
+      title: m.title,
+      status: m.status,
+      isGeneric: m.is_generic,
+      content: m.content,
+      notes: s.open(m.notes_enc, 'materials', 'notes_enc', m.id) ?? '',
+      reminder: m.reminder_date ? { date: m.reminder_date, kind: m.reminder_kind, done: m.reminder_done } : null,
+      goalIds: m.goal_ids,
+      createdAt: m.created_at,
+      updatedAt: m.updated_at,
+      deletedAt: m.deleted_at,
+      versions: versions
+        .filter((v) => v.material_id === m.id)
+        .map((v) => ({ versionNo: v.version_no, title: v.title, content: v.content, reason: v.reason, createdAt: v.created_at })),
+    })),
+    observations: observations.map((o) => {
+      const out: Record<string, unknown> = {
+        id: o.id,
+        goalId: o.goal_id,
+        materialId: o.material_id,
+        observedAt: o.observed_at,
+        context: o.context,
+        promptLevel: o.prompt_level,
+        frequency: o.frequency,
+        durationSeconds: o.duration_seconds,
+        createdAt: o.created_at,
+      }
+      for (const [col, key] of OBSERVATION_TEXTS) out[key] = s.open(o[col] as string | null, 'observations', col, o.id as string)
+      return out
+    }),
+  }
 }
 
 // ——— Campi particolari ———

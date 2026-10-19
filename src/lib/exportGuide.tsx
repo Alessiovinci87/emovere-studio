@@ -3,7 +3,8 @@ import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import { PageFooter } from '../components/SheetParts'
 import { GUIDE_POINTS, GUIDE_VERSIONS, type GuideVersion } from '../config/guide'
-import { exportPages, fileTitle, type ExportKind, type Page } from './exportPdf'
+import { downloadBlob } from './download'
+import { fileTitle, renderPdf, type ExportKind, type Page } from './exportPdf'
 import type { GuideContent } from './guide'
 import type { AppSettings } from './settings'
 
@@ -125,6 +126,18 @@ export async function exportGuide(
   kind: ExportKind,
   settings: AppSettings,
 ): Promise<void> {
+  const { blob, name } = await guidePdf(title, guide, versions, kind, settings)
+  downloadBlob(blob, name)
+}
+
+/** PDF della guida (versioni scelte) e nome del file, senza download. */
+export async function guidePdf(
+  title: string,
+  guide: GuideContent,
+  versions: GuideVersion[],
+  kind: ExportKind,
+  settings: AppSettings,
+): Promise<{ blob: Blob; name: string }> {
   const footer: Footer =
     settings.logo || settings.centerName.trim() ? { logo: settings.logo, name: settings.centerName.trim() } : null
   const body = PAGE.h - 2 * PAGE.margin - FOOTER_H
@@ -148,5 +161,5 @@ export async function exportGuide(
     )
   }
   const suffix = versions.length === 1 ? `_${versions[0]}` : ''
-  await exportPages(pages, kind, title, `${fileTitle(title, 'Guida')}${suffix}${kind === 'whatsapp' ? '_whatsapp' : ''}.pdf`)
+  return { blob: await renderPdf(pages, kind, title), name: `${fileTitle(title, 'Guida')}${suffix}${kind === 'whatsapp' ? '_whatsapp' : ''}.pdf` }
 }

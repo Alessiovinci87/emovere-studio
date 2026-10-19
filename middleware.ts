@@ -22,6 +22,18 @@ const ONE_YEAR = 60 * 60 * 24 * 365
 export default async function middleware(request: Request): Promise<Response> {
   const url = new URL(request.url)
 
+  // Pulizia notturna (Vercel Cron, vedi vercel.json): non ha sessione né password, porta il CRON_SECRET
+  // (la funzione lo controlla di nuovo)
+  const cronSecret = process.env.CRON_SECRET
+  if (
+    cronSecret &&
+    url.pathname === '/api/organization' &&
+    url.searchParams.get('action') === 'purge' &&
+    request.headers.get('authorization') === `Bearer ${cronSecret}`
+  ) {
+    return next()
+  }
+
   const password = process.env.APP_PASSWORD
   if (password) {
     const token = await tokenFor(password)

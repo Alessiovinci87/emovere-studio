@@ -70,8 +70,27 @@ export function materialToSheet(material: ServerMaterial, folder: Folder | undef
 
 export const childrenApi = {
   list: async () => (await call<{ children: ServerChild[] }>('/api/children')).children,
+  /** Bambini nel cestino, con i contatori delle loro schede */
+  trash: async () =>
+    (await call<{ children: (ServerChild & { counts: Record<string, number> })[] }>('/api/children?trash=1')).children,
   create: async (body: { id?: string; pseudonym: string; notes?: string; materialName?: string; realName?: string; legacyId?: string }) =>
     call<{ child: ServerChild; existing?: boolean }>('/api/children', send('POST', body)),
+  restore: (id: string) => call<{ child: ServerChild }>('/api/children', send('PATCH', { id, trashed: false })),
+  /** Eliminazione definitiva con tutto ciò che contiene (solo titolare) */
+  remove: (id: string) => call<{ ok: true }>(`/api/children?id=${encodeURIComponent(id)}`, send('DELETE')),
+  /** Tutti i dati del bambino, decifrati (solo titolare; finisce nel registro) */
+  exportData: (id: string) => call<ChildExport>(`/api/children?id=${encodeURIComponent(id)}&export=1`),
+}
+
+export interface ChildExport {
+  exportedAt: string
+  child: ServerChild & { realName: string | null }
+  profile: unknown[]
+  goals: unknown[]
+  materials: (Omit<ServerMaterial, 'revision' | 'currentVersion' | 'openedAt' | 'childId'> & {
+    versions: { versionNo: number; title: string; content: unknown; reason: string; createdAt: string }[]
+  })[]
+  observations: unknown[]
 }
 
 /** Tutti i dati in uso del centro: bambini (non nel cestino) e le loro schede, più le schede generiche. */

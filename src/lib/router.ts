@@ -7,6 +7,8 @@ export type Route =
   | { name: 'oggi' }
   | { name: 'bambini' }
   | { name: 'cartella'; id: string }
+  /** Cestino: bambini e schede eliminati negli ultimi 30 giorni */
+  | { name: 'cestino' }
   | { name: 'crea'; folderId?: string }
   | { name: 'libreria' }
   | { name: 'impostazioni' }
@@ -19,7 +21,7 @@ export type Route =
 export type Section = 'oggi' | 'bambini' | 'crea' | 'libreria' | 'impostazioni'
 
 export function sectionOf(route: Route): Section | null {
-  if (route.name === 'cartella') return 'bambini'
+  if (route.name === 'cartella' || route.name === 'cestino') return 'bambini'
   if (route.name === 'scheda' || route.name === 'guida') return null
   return route.name
 }
@@ -52,6 +54,7 @@ export function parsePath(pathname: string, search = ''): Route {
     }
     case 'libreria':
     case 'impostazioni':
+    case 'cestino':
       return { name: first }
     case 'scheda':
       return { name: 'scheda', id: !second || second === 'bozza' ? null : second }

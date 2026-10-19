@@ -20,9 +20,11 @@ interface Props {
   sheets: number
   onExport: () => void
   onImport: (file: File) => void
+  /** Solo titolare: registro degli accessi */
+  onOpenAudit?: () => void
 }
 
-export function SettingsView({ session, canEditCenter, localImport, onForgetLocal, settings, onSettings, lastBackup, folders, sheets, onExport, onImport }: Props) {
+export function SettingsView({ session, canEditCenter, localImport, onForgetLocal, settings, onSettings, lastBackup, folders, sheets, onExport, onImport, onOpenAudit }: Props) {
   const backupInput = useRef<HTMLInputElement>(null)
   const logoInput = useRef<HTMLInputElement>(null)
   const [logoError, setLogoError] = useState<string | null>(null)
@@ -171,6 +173,17 @@ export function SettingsView({ session, canEditCenter, localImport, onForgetLoca
           <p className="leading-relaxed text-muted">🔒 {PRIVACY_TEXT}</p>
           {session.account?.organization && <PrivacyVerifiedPanel session={session} />}
         </Card>
+
+        {onOpenAudit && (
+          <Card title="Registro degli accessi">
+            <p className="leading-relaxed text-muted">
+              Chi ha aperto, modificato, esportato o eliminato i dati dei bambini, con data e ora. Lo vede solo il titolare.
+            </p>
+            <Button tone="soft" onClick={onOpenAudit} className="self-start">
+              Apri il registro
+            </Button>
+          </Card>
+        )}
 
         <Card title="Informazioni">
           <p className="text-muted">

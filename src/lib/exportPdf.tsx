@@ -80,13 +80,18 @@ function pagesFor(sheet: Sheet, preset: Preset, content: ExportContent, ctx: Exp
 
 /** Esporta in PDF A4 e avvia il download. */
 export async function exportPdf(sheet: Sheet, kind: ExportKind, content: ExportContent, ctx: ExportContext): Promise<void> {
-  const pages = pagesFor(sheet, presets[kind], content, ctx)
-  if (pages.length === 0) throw new Error('Non ci sono vignette da esportare.')
-  await exportPages(pages, kind, sheet.title || 'Scheda', fileName(sheet, kind, content))
+  downloadBlob(await sheetPdf(sheet, kind, content, ctx), fileName(sheet, kind, content))
 }
 
-/** Pagine già pronte → PDF A4 (una immagine per pagina) → download. Comune a schede e guide. */
-export async function exportPages(pages: Page[], kind: ExportKind, title: string, file: string): Promise<void> {
+/** PDF A4 della scheda, senza download (es. per l'esportazione dei dati di un bambino). */
+export async function sheetPdf(sheet: Sheet, kind: ExportKind, content: ExportContent, ctx: ExportContext): Promise<Blob> {
+  const pages = pagesFor(sheet, presets[kind], content, ctx)
+  if (pages.length === 0) throw new Error('Non ci sono vignette da esportare.')
+  return renderPdf(pages, kind, sheet.title || 'Scheda')
+}
+
+/** Pagine già pronte → PDF A4 (una immagine per pagina). Comune a schede e guide. */
+export async function renderPdf(pages: Page[], kind: ExportKind, title: string): Promise<Blob> {
   const preset = presets[kind]
   const canvases: HTMLCanvasElement[] = []
   for (const page of pages) canvases.push(await renderPage(page.element, preset))
@@ -96,7 +101,7 @@ export async function exportPages(pages: Page[], kind: ExportKind, title: string
     pdf = buildPdf(title, pages, canvases, quality)
     if (!preset.maxBytes || pdf.size <= preset.maxBytes) break
   }
-  downloadBlob(pdf!, file)
+  return pdf!
 }
 
 /** Disegna una pagina fuori schermo e la converte in un canvas alla risoluzione richiesta. */

@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import type { ExportContext } from '../lib/exportPdf'
 import { statuses } from '../lib/sheet'
 import type { Folder, Sheet, SheetStatus } from '../types'
 import { Page, SectionHeader } from './AppShell'
 import { FolderNameDialog } from './FoldersView'
+import { ChildDataActions } from './ChildDataActions'
 import { SheetCard } from './SheetCard'
 import { Button, NotesField } from './ui'
 
@@ -21,9 +23,11 @@ interface Props {
   onDuplicate: (id: string) => void
   onMove: (id: string) => void
   onDeleteSheet: (id: string) => void
+  /** Solo titolare: esportazione dei dati ed eliminazione definitiva */
+  owner?: { exportContext: ExportContext; onDeleted: () => void }
 }
 
-export function FolderView({ folder, generic, sheets, onBack, onRename, onNotes, onDelete, onNewSheet, onOpenSheet, ...actions }: Props) {
+export function FolderView({ folder, generic, sheets, owner, onBack, onRename, onNotes, onDelete, onNewSheet, onOpenSheet, ...actions }: Props) {
   const [renaming, setRenaming] = useState(false)
   const groups = statuses
     .map((s) => ({ ...s, sheets: sheets.filter((sh) => sh.status === s.id).sort((a, b) => b.updatedAt - a.updatedAt) }))
@@ -48,10 +52,10 @@ export function FolderView({ folder, generic, sheets, onBack, onRename, onNotes,
                   onClick={() => {
                     const n = sheets.length
                     const what = n === 0 ? '' : n === 1 ? ' e la sua scheda' : ` e le sue ${n} schede`
-                    if (confirm(`Spostare nel cestino la cartella “${folder.name}”${what}? Il titolare può recuperarla entro 30 giorni.`)) onDelete()
+                    if (confirm(`Spostare nel cestino la cartella “${folder.name}”${what}? Si può ripristinare dal cestino per 30 giorni.`)) onDelete()
                   }}
                 >
-                  Elimina cartella
+                  Sposta nel cestino
                 </Button>
               </>
             )}
@@ -86,7 +90,7 @@ export function FolderView({ folder, generic, sheets, onBack, onRename, onNotes,
                     onDuplicate={() => actions.onDuplicate(sheet.id)}
                     onMove={() => actions.onMove(sheet.id)}
                     onDelete={() => {
-                      if (confirm(`Spostare nel cestino la scheda “${sheet.title || 'Senza titolo'}”? Il titolare può recuperarla entro 30 giorni.`))
+                      if (confirm(`Spostare nel cestino la scheda “${sheet.title || 'Senza titolo'}”? Si può ripristinare dal cestino per 30 giorni.`))
                         actions.onDeleteSheet(sheet.id)
                     }}
                   />
@@ -102,9 +106,17 @@ export function FolderView({ folder, generic, sheets, onBack, onRename, onNotes,
             cartella di un bambino.
           </aside>
         ) : (
-          <aside className="flex flex-col gap-2 rounded-3xl bg-white p-6 shadow-sm">
-            {folder.code && <p className="text-xs font-bold text-muted">Codice interno {folder.code}</p>}
-            <NotesField value={folder.notes} onChange={onNotes} />
+          <aside className="flex flex-col gap-6">
+            <div className="flex flex-col gap-2 rounded-3xl bg-white p-6 shadow-sm">
+              {folder.code && <p className="text-xs font-bold text-muted">Codice interno {folder.code}</p>}
+              <NotesField value={folder.notes} onChange={onNotes} />
+            </div>
+            {owner && (
+              <div className="flex flex-col gap-2 rounded-3xl bg-white p-6 shadow-sm">
+                <h3 className="font-bold">Dati del bambino</h3>
+                <ChildDataActions folder={folder} exportContext={owner.exportContext} onDeleted={owner.onDeleted} />
+              </div>
+            )}
           </aside>
         )}
       </div>

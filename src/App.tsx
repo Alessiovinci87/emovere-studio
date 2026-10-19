@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Session } from './AuthGate'
+import { AuditLogDialog } from './components/AuditLogDialog'
 import { ImportDialog } from './components/ImportDialog'
 import { accountApi } from './lib/account'
 import { localDataPresent, localImportAvailable, localImportDone, localImportSource, markLocalImported, type ImportSource } from './lib/importLocal'
@@ -31,6 +32,7 @@ import { CreateView, type CreateChoice } from './views/CreateView'
 import { SettingsView } from './views/SettingsView'
 import { GuideScreen } from './views/GuideEditor'
 import { TodayView } from './views/TodayView'
+import { TrashView } from './views/TrashView'
 
 type FolderAction = { mode: 'save' } | { mode: 'duplicate'; sheetId: string } | { mode: 'move'; sheetId: string }
 type FolderChoice = { folderId: string } | { newName: string }
@@ -101,6 +103,7 @@ function Workspace({ session, server, data }: { session: Session; server: Return
   /** Vignette generate con AI (unite al catalogo) */
   const [aiScenes, setAiList] = useState<Scene[]>([])
   const [aiOpen, setAiOpen] = useState(false)
+  const [auditOpen, setAuditOpen] = useState(false)
 
   /** Aggiorna il catalogo con le vignette AI e ridisegna */
   const applyAiScenes = useCallback((list: Scene[]) => {
@@ -375,6 +378,7 @@ Non si può annullare.`)) return
             genericCount={data.sheets.filter((s) => !s.folderId).length}
             onOpenGeneric={() => openFolder(GENERIC_FOLDER.id)}
             onOpenFolder={openFolder}
+            onOpenTrash={() => navigate({ name: 'cestino' })}
             onCreateFolder={(name) => {
               const { data: d, folder } = store.addFolder(data, name)
               setData(d)
@@ -420,9 +424,32 @@ Non si può annullare.`)) return
             onDuplicate={(id) => setFolderAction({ mode: 'duplicate', sheetId: id })}
             onMove={(id) => setFolderAction({ mode: 'move', sheetId: id })}
             onDeleteSheet={(id) => setData((d) => store.deleteSheet(d, id))}
+            owner={
+              isOwner
+                ? {
+                    exportContext: { settings, coloringKeys },
+                    // Già eliminato sul server: si toglie dai dati dell'app (il cestino risponde 404, va bene)
+                    onDeleted: () => {
+                      deleteFolder(folder.id)
+                      setToast(`“${folder.name}” eliminato per sempre`)
+                    },
+                  }
+                : undefined
+            }
           />
         )
       }
+      case 'cestino':
+        return (
+          <TrashView
+            isOwner={isOwner}
+            onBack={() => back({ name: 'bambini' })}
+            onRestored={(message) => {
+              setToast(message)
+              void server.reload()
+            }}
+          />
+        )
       case 'crea':
         return (
           <CreateView
@@ -476,6 +503,7 @@ Non si può annullare.`)) return
             sheets={data.sheets.length}
             onExport={exportBackup}
             onImport={importBackup}
+            onOpenAudit={isOwner ? () => setAuditOpen(true) : undefined}
           />
         )
       default:
@@ -633,6 +661,8 @@ Non si può annullare.`)) return
           onClose={() => setFolderAction(null)}
         />
       )}
+
+      {auditOpen && <AuditLogDialog folders={data.folders} onClose={() => setAuditOpen(false)} />}
 
       {aiOpen && (
         <AiCreateDialog

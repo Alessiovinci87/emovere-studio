@@ -468,6 +468,78 @@ r = await call(guideApi, 'POST', '/api/guide', await token('00000000-0000-0000-0
 assert.equal(r.status, 403)
 globalThis.fetch = realFetch
 
+// ——— Punto 6: esportazione, registro degli accessi, pulizia notturna ———
+r = await call(children, 'GET', `/api/children?id=${child.id}&export=1`, tb)
+assert.equal(r.status, 403, 'esportare: solo il titolare')
+r = await call(children, 'GET', `/api/children?id=${child.id}&export=1`, tc)
+assert.equal(r.status, 404, 'altro centro')
+await sql`
+  insert into app.observations (org_id, child_id, behavior_enc)
+  select ${orgId}, ${child.id}, null`
+r = await call(materials, 'POST', '/api/materials', tb, { childId: child.id, title: 'Per l’export', content: {}, notes: 'nota' })
+await call(materials, 'PATCH', '/api/materials', tb, { id: r.body.material.id, status: 'pronta' })
+r = await call(children, 'GET', `/api/children?id=${child.id}&export=1`, ta)
+assert.equal(r.status, 200, JSON.stringify(r.body))
+assert.equal(r.body.child.pseudonym, 'Stella')
+assert.equal(r.body.child.realName, null)
+assert.equal(r.body.profile[0].text, 'Dinosauri e treni', 'anche le voci archiviate')
+assert.equal(r.body.goals[0].events[1].note, 'Tre settimane di fila')
+const forExport = r.body.materials.find((m) => m.title === 'Per l’export')
+assert.equal(forExport.notes, 'nota')
+assert.equal(forExport.versions.length, 1, 'con le versioni fisse')
+assert.ok(r.body.materials.every((m) => Array.isArray(m.versions) && typeof m.notes === 'string'))
+assert.equal(r.body.observations.length, 1)
+const [exported] = await sql`select user_id from app.audit_log where action = 'esporta' and child_id = ${child.id}`
+assert.equal(exported.user_id, A, 'esportazione nel registro')
+
+r = await call(org, 'GET', '/api/organization?resource=audit', tb)
+assert.equal(r.status, 403, 'registro: solo il titolare')
+r = await call(org, 'GET', '/api/organization?resource=audit&child=nonvalido', ta)
+assert.equal(r.status, 400)
+r = await call(org, 'GET', '/api/organization?resource=audit', ta)
+assert.equal(r.status, 200)
+const allEntries = r.body.entries
+assert.ok(allEntries.length > 0 && allEntries.length <= 100)
+assert.ok(allEntries.every((e, i) => i === 0 || Number(e.id) < Number(allEntries[i - 1].id)), 'dal più recente')
+assert.equal(allEntries[0].action, 'esporta')
+assert.deepEqual(allEntries[0].child, { id: child.id, code: 'B-0001', pseudonym: 'Stella' })
+assert.equal(allEntries[0].user.name, 'Martina')
+r = await call(org, 'GET', `/api/organization?resource=audit&user=${B}&action=legge`, ta)
+assert.ok(r.body.entries.length > 0 && r.body.entries.every((e) => e.user.id === B && e.action === 'legge'))
+r = await call(org, 'GET', `/api/organization?resource=audit&child=${child2.id}`, ta)
+assert.ok(r.body.entries.length > 0, 'bambino eliminato: le righe restano')
+assert.ok(r.body.entries.every((e) => e.child.id === child2.id && e.child.pseudonym === null))
+// Pagine: "before" continua da dove si era arrivati
+const [{ total }] = await sql`select count(*)::int as total from app.audit_log where org_id = ${orgId}`
+let seen = 0
+let before = null
+for (;;) {
+  r = await call(org, 'GET', `/api/organization?resource=audit${before ? `&before=${before}` : ''}`, ta)
+  seen += r.body.entries.length
+  if (!r.body.next) break
+  before = r.body.next
+}
+assert.equal(seen, total, 'tutte le righe, pagina dopo pagina')
+r = await call(org, 'GET', '/api/organization?resource=audit', tc)
+assert.ok(r.body.entries.every((e) => e.child === null || e.child.id !== child.id), 'altro centro: non vede il registro del centro 1')
+
+// Pulizia: solo con il CRON_SECRET
+r = await call(org, 'GET', '/api/organization?action=purge', null)
+assert.equal(r.status, 503, 'senza CRON_SECRET non parte')
+process.env.CRON_SECRET = 'segreto-di-prova'
+r = await call(org, 'GET', '/api/organization?action=purge', null, undefined, { authorization: 'Bearer sbagliato' })
+assert.equal(r.status, 401)
+r = await call(org, 'GET', '/api/organization?action=purge', ta)
+assert.equal(r.status, 401, 'nemmeno con il token di un utente')
+await sql`update app.materials set deleted_at = now() - interval '31 days' where id = ${myMatId}`
+r = await call(org, 'GET', '/api/organization?action=purge', null, undefined, { authorization: 'Bearer segreto-di-prova' })
+assert.equal(r.status, 200, JSON.stringify(r.body))
+assert.deepEqual(r.body, { childrenDeleted: 0, materialsDeleted: 1 })
+r = await call(org, 'GET', '/api/organization?resource=audit', ta)
+assert.equal(r.body.entries[0].user, null, 'pulizia automatica: senza utente')
+assert.equal(r.body.entries[0].details.automatico, true)
+delete process.env.CRON_SECRET
+
 console.log('API: tutti i test superati')
 await sql.end()
 server.close()

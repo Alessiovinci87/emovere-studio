@@ -35,6 +35,27 @@ export interface Member {
   mfa?: boolean
 }
 
+export type AuditAction = 'crea' | 'legge' | 'modifica' | 'esporta' | 'elimina' | 'ripristina' | 'importa'
+
+export interface AuditEntry {
+  id: string
+  at: string
+  action: AuditAction
+  entity: string
+  entityId: string | null
+  /** pseudonym null = bambino eliminato (resta solo l'identificativo) */
+  child: { id: string; code: string | null; pseudonym: string | null } | null
+  /** null = pulizia automatica; name null = persona non più nel centro */
+  user: { id: string; name: string | null } | null
+  details: Record<string, unknown>
+}
+
+export interface AuditFilter {
+  child?: string
+  user?: string
+  action?: AuditAction
+}
+
 /** Risposta di /api: `network` = server irraggiungibile (offline), `status` 0 in quel caso. */
 export interface ApiResult {
   ok: boolean
@@ -89,4 +110,11 @@ export const accountApi = {
     call<{ ok: true }>('/api/members', send('PATCH', { userId, ...patch })),
   removeMember: (userId: string) => call<{ ok: true }>(`/api/members?user=${encodeURIComponent(userId)}`, send('DELETE')),
   resetMfa: (userId: string) => call<{ ok: true }>('/api/members', send('POST', { action: 'reset-mfa', userId })),
+  /** Registro degli accessi (solo titolare), 100 righe per volta dal più recente */
+  audit: (filter: AuditFilter, before?: string) => {
+    const query = new URLSearchParams({ resource: 'audit' })
+    for (const [key, value] of Object.entries(filter)) if (value) query.set(key, value)
+    if (before) query.set('before', before)
+    return call<{ entries: AuditEntry[]; next: string | null }>(`/api/organization?${query}`)
+  },
 }

@@ -3,6 +3,25 @@ import { apiRequest, call, send, type ApiResult } from './account'
 
 export type MaterialKind = 'scheda' | 'storia_sociale' | 'scenario' | 'sequenza' | 'guida' | 'caa' | 'rinforzo' | 'attivita'
 
+export const KIND_LABELS: Record<MaterialKind, string> = {
+  scheda: 'Scheda',
+  storia_sociale: 'Storia sociale',
+  scenario: 'Scenario',
+  sequenza: 'Sequenza',
+  guida: 'Guida',
+  caa: 'Comunicazione',
+  rinforzo: 'Rinforzo',
+  attivita: 'Attività',
+}
+
+/** Giorni di permanenza nel cestino prima della pulizia automatica notturna */
+export const TRASH_DAYS = 30
+
+/** Giorni che restano prima dell'eliminazione automatica (almeno 0) */
+export function trashDaysLeft(deletedAt: string, now = Date.now()): number {
+  return Math.max(0, Math.ceil((new Date(deletedAt).getTime() + TRASH_DAYS * 86_400_000 - now) / 86_400_000))
+}
+
 export interface ServerMaterial {
   id: string
   childId: string | null
