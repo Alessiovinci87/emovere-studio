@@ -68,5 +68,17 @@ export function useServerData(orgId: string) {
     [setData],
   )
 
-  return { data, setData, status, loadError, reload: load, resolveConflict }
+  /** Attende che la scheda sia salvata sul server nel bambino indicato (vedi ServerSync.whenSheetSaved) */
+  const whenSheetSaved = useCallback(
+    (id: string, childId: string | null, signal?: AbortSignal) =>
+      engine.current ? engine.current.whenSheetSaved(id, childId, signal) : Promise.reject(new Error('Dati non caricati.')),
+    [],
+  )
+
+  const whenFolderSaved = useCallback(
+    (id: string, signal?: AbortSignal) =>
+      engine.current ? engine.current.whenFolderSaved(id, signal) : Promise.reject(new Error('Dati non caricati.')),
+    [],
+  )
+  return { data, setData, status, loadError, reload: load, resolveConflict, whenSheetSaved, whenFolderSaved }
 }

@@ -89,6 +89,8 @@ export class ServerSync {
   private waiting = false
   private message: string | null = null
   private timer: ReturnType<typeof setTimeout> | undefined
+  /** In attesa che una cartella o una scheda arrivi al server (es. per collegarla a un obiettivo) */
+  private waiters: { ready: () => boolean; resolve: () => void; reject: (err: Error) => void }[] = []
   private readonly onOnline = () => this.flushSoon(0)
 
   constructor(
@@ -144,6 +146,36 @@ export class ServerSync {
   dispose() {
     clearTimeout(this.timer)
     window.removeEventListener('online', this.onOnline)
+    for (const w of this.waiters.splice(0)) w.reject(new Error('Dati ricaricati: riprova.'))
+  }
+
+  /**
+   * Si risolve quando la scheda è salvata sul server nel bambino indicato (subito, se lo è già).
+   * Senza rete resta in attesa, come il salvataggio; `signal` la annulla.
+   */
+  whenSheetSaved(id: string, childId: string | null, signal?: AbortSignal): Promise<void> {
+    return this.waitFor(() => {
+      const form = this.synced.sheets.get(id)
+      return form !== undefined && form.childId === childId
+    }, signal)
+  }
+
+  /** Come `whenSheetSaved`, per una cartella (un bambino appena creato) */
+  whenFolderSaved(id: string, signal?: AbortSignal): Promise<void> {
+    return this.waitFor(() => this.synced.folders.has(id), signal)
+  }
+
+  private waitFor(ready: () => boolean, signal?: AbortSignal): Promise<void> {
+    if (ready()) return Promise.resolve()
+    return new Promise((resolve, reject) => {
+      const waiter = { ready, resolve, reject }
+      this.waiters.push(waiter)
+      signal?.addEventListener('abort', () => {
+        this.waiters = this.waiters.filter((w) => w !== waiter)
+        reject(new DOMException('Annullato', 'AbortError'))
+      })
+      this.flushSoon(0)
+    })
   }
 
   update(data: StoreData) {
@@ -405,5 +437,10 @@ export class ServerSync {
           ? 'error'
           : 'saved'
     this.onStatus({ state, message: this.message, conflicts: new Map(this.conflicts) })
+    const ready = this.waiters.filter((w) => w.ready())
+    if (ready.length > 0) {
+      this.waiters = this.waiters.filter((w) => !ready.includes(w))
+      for (const w of ready) w.resolve()
+    }
   }
 }

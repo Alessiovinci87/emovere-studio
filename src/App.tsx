@@ -10,7 +10,6 @@ import { AppShell, Page, SectionHeader } from './components/AppShell'
 import { Editor } from './components/Editor'
 import { SparkleIcon } from './components/Icons'
 import { FoldersView } from './components/FoldersView'
-import { FolderView } from './components/FolderView'
 import { Library } from './components/Library'
 import { Modal } from './components/Modal'
 import { FolderPicker, SymbolPicker } from './components/Pickers'
@@ -26,7 +25,7 @@ import { dueReminders, todayISO } from './lib/reminders'
 import { useRouter, type Route, type Section, sectionOf } from './lib/router'
 import { createSheet, newId } from './lib/sheet'
 import * as store from './lib/store'
-import type { Character, Folder, Scene, Sheet, StoreData, TemplateId } from './types'
+import type { Character, Scene, Sheet, StoreData, TemplateId } from './types'
 import { visibleIndexes } from './components/SheetView'
 import { CreateView, type CreateChoice } from './views/CreateView'
 import { SettingsView } from './views/SettingsView'
@@ -34,12 +33,14 @@ import { GuideScreen } from './views/GuideEditor'
 import { TodayView } from './views/TodayView'
 import { TrashView } from './views/TrashView'
 import { ChildView } from './views/ChildView'
+import { GenericSheetsView } from './views/GenericSheetsView'
+import type { SheetActions } from './components/child/MaterialsTab'
 
 type FolderAction = { mode: 'save' } | { mode: 'duplicate'; sheetId: string } | { mode: 'move'; sheetId: string }
 type FolderChoice = { folderId: string } | { newName: string }
 
-/** Cartella "virtuale" con le schede senza bambino (generiche, ex bozze) */
-const GENERIC_FOLDER: Folder = { id: '__generiche', name: 'Schede senza bambino', notes: '', createdAt: 0, updatedAt: 0 }
+/** URL della cartella "virtuale" con le schede senza bambino (generiche, ex bozze) */
+const GENERIC_FOLDER_ID = '__generiche'
 
 /** Dati del centro dal server: senza accesso (o senza server in locale) l'app non parte. */
 export default function App({ session }: { session: Session }) {
@@ -355,6 +356,15 @@ Non si può annullare.`)) return
   /** Indietro se c'è una schermata precedente nell'app */
   const backTo = (fallback: Route) => (depth > 0 ? () => back(fallback) : undefined)
 
+  /** Azioni sulle schede negli elenchi (cartella del bambino, schede senza bambino) */
+  const sheetActions: SheetActions = {
+    onOpen: openSheet,
+    onStatus: (id, status) => setData((d) => store.setStatus(d, id, status)),
+    onDuplicate: (id) => setFolderAction({ mode: 'duplicate', sheetId: id }),
+    onMove: (id) => setFolderAction({ mode: 'move', sheetId: id }),
+    onDelete: (id) => setData((d) => store.deleteSheet(d, id)),
+  }
+
   function renderSection() {
     switch (route.name) {
       case 'oggi':
@@ -377,7 +387,7 @@ Non si può annullare.`)) return
             folders={data.folders}
             sheets={data.sheets}
             genericCount={data.sheets.filter((s) => !s.folderId).length}
-            onOpenGeneric={() => openFolder(GENERIC_FOLDER.id)}
+            onOpenGeneric={() => openFolder(GENERIC_FOLDER_ID)}
             onOpenFolder={openFolder}
             onOpenTrash={() => navigate({ name: 'cestino' })}
             onCreateFolder={(name) => {
@@ -388,23 +398,13 @@ Non si può annullare.`)) return
           />
         )
       case 'cartella': {
-        if (route.id === GENERIC_FOLDER.id) {
+        if (route.id === GENERIC_FOLDER_ID) {
           return (
-            <FolderView
-              key={GENERIC_FOLDER.id}
-              folder={GENERIC_FOLDER}
-              generic
+            <GenericSheetsView
               sheets={data.sheets.filter((s) => !s.folderId)}
+              sheetActions={sheetActions}
               onBack={() => back({ name: 'bambini' })}
-              onRename={() => undefined}
-              onNotes={() => undefined}
-              onDelete={() => undefined}
               onNewSheet={() => navigate({ name: 'crea' })}
-              onOpenSheet={openSheet}
-              onStatus={(id, status) => setData((d) => store.setStatus(d, id, status))}
-              onDuplicate={(id) => setFolderAction({ mode: 'duplicate', sheetId: id })}
-              onMove={(id) => setFolderAction({ mode: 'move', sheetId: id })}
-              onDeleteSheet={(id) => setData((d) => store.deleteSheet(d, id))}
             />
           )
         }
@@ -418,13 +418,7 @@ Non si può annullare.`)) return
             tab={route.tab ?? 'materiali'}
             isOwner={isOwner}
             exportContext={{ settings, coloringKeys }}
-            sheetActions={{
-              onOpen: openSheet,
-              onStatus: (id, status) => setData((d) => store.setStatus(d, id, status)),
-              onDuplicate: (id) => setFolderAction({ mode: 'duplicate', sheetId: id }),
-              onMove: (id) => setFolderAction({ mode: 'move', sheetId: id }),
-              onDelete: (id) => setData((d) => store.deleteSheet(d, id)),
-            }}
+            sheetActions={sheetActions}
             // Le schede della cartella cambiano l'URL senza nuove voci: Indietro torna a Bambini
             onTab={(tab) => navigate({ name: 'cartella', id: folder.id, tab }, { replace: true })}
             onBack={() => back({ name: 'bambini' })}
@@ -437,6 +431,8 @@ Non si può annullare.`)) return
               deleteFolder(folder.id)
               setToast(`“${folder.name}” eliminato per sempre`)
             }}
+            whenSheetSaved={server.whenSheetSaved}
+            whenFolderSaved={server.whenFolderSaved}
           />
         )
       }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { GOAL_STATUSES, goalStatusInfo } from '../../config/profile'
 import type { Goal } from '../../lib/childApi'
 import { statuses } from '../../lib/sheet'
@@ -29,17 +29,21 @@ interface Props {
   links: Map<string, string[]> | null
   actions: SheetActions
   onNewSheet: () => void
-  onSetGoals: (sheet: Sheet, goalIds: string[]) => Promise<void>
+  /** Collega gli obiettivi; se la scheda si sta ancora salvando aspetta (onWaiting), `signal` annulla */
+  onSetGoals: (sheet: Sheet, goalIds: string[], signal: AbortSignal, onWaiting: () => void) => Promise<void>
+  /** Schede senza bambino: solo per stato, senza obiettivi */
+  generic?: boolean
 }
 
-export function MaterialsTab({ sheets, goals, links, actions, onNewSheet, onSetGoals }: Props) {
-  const [grouping, setGrouping] = useState<Grouping>(() => {
+export function MaterialsTab({ sheets, goals, links, actions, onNewSheet, onSetGoals, generic }: Props) {
+  const [chosenGrouping, setGrouping] = useState<Grouping>(() => {
     try {
       return localStorage.getItem(GROUPING_KEY) === 'stato' ? 'stato' : 'obiettivo'
     } catch {
       return 'obiettivo'
     }
   })
+  const grouping: Grouping = generic ? 'stato' : chosenGrouping
   const [linking, setLinking] = useState<Sheet | null>(null)
   const sorted = [...sheets].sort((a, b) => b.updatedAt - a.updatedAt)
   const goalIdsOf = (id: string) => (links?.get(id) ?? []).filter((g) => goals.some((x) => x.id === g))
@@ -76,6 +80,12 @@ export function MaterialsTab({ sheets, goals, links, actions, onNewSheet, onSetG
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
+        {generic ? (
+          <p className="max-w-xl text-sm leading-relaxed text-muted">
+            Schede generiche, senza riferimenti a un bambino: si possono usare con più bambini. Con “Sposta” entrano nella
+            cartella di un bambino.
+          </p>
+        ) : (
         <div role="radiogroup" aria-label="Raggruppa" className="inline-flex rounded-full border border-line bg-white p-1">
           {(['obiettivo', 'stato'] as const).map((g) => (
             <button
@@ -89,14 +99,17 @@ export function MaterialsTab({ sheets, goals, links, actions, onNewSheet, onSetG
             </button>
           ))}
         </div>
-        <span className="text-sm text-muted">
-          {sheets.length} {sheets.length === 1 ? 'scheda' : 'schede'}
-        </span>
+        )}
+        {!generic && (
+          <span className="text-sm text-muted">
+            {sheets.length} {sheets.length === 1 ? 'scheda' : 'schede'}
+          </span>
+        )}
       </div>
 
       {sheets.length === 0 && (
         <div className="rounded-3xl bg-sand/60 px-6 py-12 text-center text-muted">
-          Ancora nessuna scheda per questo bambino.{' '}
+          {generic ? 'Nessuna scheda senza bambino.' : 'Ancora nessuna scheda per questo bambino.'}{' '}
           <button onClick={onNewSheet} className="font-bold text-accent underline">
             Creane una
           </button>
@@ -147,8 +160,8 @@ export function MaterialsTab({ sheets, goals, links, actions, onNewSheet, onSetG
           goals={goals}
           initial={goalIdsOf(linking.id)}
           onClose={() => setLinking(null)}
-          onSave={async (ids) => {
-            await onSetGoals(linking, ids)
+          onSave={async (ids, signal, onWaiting) => {
+            await onSetGoals(linking, ids, signal, onWaiting)
             setLinking(null)
           }}
         />
@@ -167,17 +180,24 @@ function LinkGoalsDialog({
   sheet: Sheet
   goals: Goal[]
   initial: string[]
-  onSave: (ids: string[]) => Promise<void>
+  onSave: (ids: string[], signal: AbortSignal, onWaiting: () => void) => Promise<void>
   onClose: () => void
 }) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set(initial))
   const [busy, setBusy] = useState(false)
+  /** La scheda si sta ancora salvando: si aspetta, "Annulla" smette di aspettare */
+  const [waiting, setWaiting] = useState(false)
+  const controller = useRef<AbortController | null>(null)
   const [error, setError] = useState<string | null>(null)
+  function cancel() {
+    controller.current?.abort()
+    onClose()
+  }
   const ordered = GOAL_STATUSES.flatMap((s) => goals.filter((g) => g.status === s.id))
   const changed = selected.size !== initial.length || initial.some((id) => !selected.has(id))
 
   return (
-    <Modal title="Obiettivi della scheda" onClose={busy ? undefined : onClose} size="sm">
+    <Modal title="Obiettivi della scheda" onClose={busy && !waiting ? undefined : cancel} size="sm">
       <div className="flex flex-col gap-4">
         <p className="text-sm text-muted">
           “{sheet.title || 'Senza titolo'}”: scegli gli obiettivi a cui serve. Ogni collegamento resta nello storico dell’obiettivo.
@@ -209,9 +229,14 @@ function LinkGoalsDialog({
             ))}
           </ul>
         )}
+        {waiting && (
+          <p role="status" className="text-sm font-bold text-muted">
+            Aspetto che la scheda sia salvata, poi la collego…
+          </p>
+        )}
         {error && <ErrorText>{error}</ErrorText>}
         <div className="flex justify-end gap-2">
-          <Button disabled={busy} onClick={onClose}>
+          <Button disabled={busy && !waiting} onClick={cancel}>
             Annulla
           </Button>
           <Button
@@ -220,15 +245,18 @@ function LinkGoalsDialog({
             onClick={async () => {
               setBusy(true)
               setError(null)
+              controller.current = new AbortController()
               try {
-                await onSave([...selected])
+                await onSave([...selected], controller.current.signal, () => setWaiting(true))
               } catch (err) {
+                if ((err as Error).name === 'AbortError') return
                 setError((err as Error).message)
                 setBusy(false)
+                setWaiting(false)
               }
             }}
           >
-            Salva
+            {waiting ? 'Salvo…' : 'Salva'}
           </Button>
         </div>
       </div>

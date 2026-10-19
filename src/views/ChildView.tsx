@@ -38,44 +38,58 @@ interface Props {
   onNewSheet: () => void
   /** Eliminato per sempre sul server (solo titolare) */
   onDeleted: () => void
+  /** Attende che una scheda (anche appena creata) sia salvata sul server in questo bambino */
+  whenSheetSaved: (id: string, childId: string | null, signal?: AbortSignal) => Promise<void>
+  whenFolderSaved: (id: string, signal?: AbortSignal) => Promise<void>
 }
 
-export function ChildView({ folder, sheets, tab, isOwner, exportContext, sheetActions, onTab, onBack, onRename, onNotes, onTrash, onNewSheet, onDeleted }: Props) {
+export function ChildView({ folder, sheets, tab, isOwner, exportContext, sheetActions, onTab, onBack, onRename, onNotes, onTrash, onNewSheet, onDeleted, whenSheetSaved, whenFolderSaved }: Props) {
   const [detail, setDetail] = useState<ChildDetail | null>(null)
   const [links, setLinks] = useState<Map<string, string[]> | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [renaming, setRenaming] = useState(false)
 
-  const load = useCallback(async () => {
-    setError(null)
-    try {
-      const [d, l] = await Promise.all([childApi.detail(folder.id), childApi.goalLinks(folder.id)])
-      setDetail(d)
-      setLinks(l)
-    } catch (err) {
-      setError((err as Error).message)
-    }
-  }, [folder.id])
-  useEffect(() => void load(), [load])
+  // Un bambino appena creato si sta forse ancora salvando: prima si aspetta che sia sul server
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      setError(null)
+      try {
+        await whenFolderSaved(folder.id, signal)
+        const [d, l] = await Promise.all([childApi.detail(folder.id), childApi.goalLinks(folder.id)])
+        if (signal?.aborted) return
+        setDetail(d)
+        setLinks(l)
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') setError((err as Error).message)
+      }
+    },
+    [folder.id, whenFolderSaved],
+  )
+  useEffect(() => {
+    const controller = new AbortController()
+    void load(controller.signal)
+    return () => controller.abort()
+  }, [load])
 
   const setEntries = (update: (list: ProfileEntry[]) => ProfileEntry[]) => setDetail((d) => (d ? { ...d, profile: update(d.profile) } : d))
   const setGoals = (update: (list: Goal[]) => Goal[]) => setDetail((d) => (d ? { ...d, goals: update(d.goals) } : d))
 
-  async function setSheetGoals(sheet: Sheet, goalIds: string[]) {
+  /** Prima si aspetta che la scheda sia sul server (una scheda appena creata si sta ancora salvando) */
+  async function setSheetGoals(sheet: Sheet, goalIds: string[], signal: AbortSignal, onWaiting: () => void) {
+    const waiting = setTimeout(onWaiting, 300)
     try {
-      const { material, goalEvents } = await childApi.setGoals(sheet.id, goalIds)
-      setLinks((l) => new Map(l).set(sheet.id, material.goalIds))
-      setGoals((list) =>
-        list.map((g) => {
-          const added = goalEvents.filter((e) => e.goalId === g.id).map((e) => e.event)
-          return added.length > 0 ? { ...g, events: [...g.events, ...added] } : g
-        }),
-      )
-    } catch (err) {
-      // Scheda appena creata, non ancora arrivata al server
-      if ((err as Error).message === 'Scheda non trovata.') throw new Error('La scheda non è ancora salvata: riprova tra qualche secondo.')
-      throw err
+      await whenSheetSaved(sheet.id, folder.id, signal)
+    } finally {
+      clearTimeout(waiting)
     }
+    const { material, goalEvents } = await childApi.setGoals(sheet.id, goalIds)
+    setLinks((l) => new Map(l).set(sheet.id, material.goalIds))
+    setGoals((list) =>
+      list.map((g) => {
+        const added = goalEvents.filter((e) => e.goalId === g.id).map((e) => e.event)
+        return added.length > 0 ? { ...g, events: [...g.events, ...added] } : g
+      }),
+    )
   }
 
   const goals = detail?.goals ?? []
