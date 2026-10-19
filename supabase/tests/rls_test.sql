@@ -185,6 +185,27 @@ select pg_temp.expect_error(format(
   $q$insert into app.goal_events (org_id, goal_id, kind, author_id) values (%L, %L, 'nota', '00000000-0000-0000-0000-00000000000b')$q$,
   current_setting('t.org1'), current_setting('t.goal1')), '42501');
 
+-- Collegare/scollegare un materiale finisce nello storico; eliminato il materiale, il titolo resta
+with x as (
+  insert into app.materials (org_id, child_id, kind, title, content)
+  values (current_setting('t.org1')::uuid, current_setting('t.child1')::uuid, 'scheda', 'Da collegare', '{}')
+  returning id
+) select set_config('t.matLink', id::text, false) from x;
+insert into app.goal_events (org_id, goal_id, kind, material_id, material_title, material_action)
+  values (current_setting('t.org1')::uuid, current_setting('t.goal1')::uuid, 'materiale',
+          current_setting('t.matLink')::uuid, 'Da collegare', 'collegato');
+select pg_temp.expect_error(format(
+  $q$insert into app.goal_events (org_id, goal_id, kind) values (%L, %L, 'materiale')$q$,
+  current_setting('t.org1'), current_setting('t.goal1')), '23514');
+select pg_temp.expect_error(format(
+  $q$insert into app.goal_events (org_id, goal_id, kind, material_action) values (%L, %L, 'nota', 'collegato')$q$,
+  current_setting('t.org1'), current_setting('t.goal1')), '23514');
+delete from app.materials where id = current_setting('t.matLink')::uuid;
+select pg_temp.ok((
+  select material_id is null and material_title = 'Da collegare' and material_action = 'collegato'
+  from app.goal_events where kind = 'materiale'
+), 'materiale eliminato: nello storico resta il titolo');
+
 -- Osservazione collegata all'obiettivo: eliminato l'obiettivo, resta l'osservazione
 insert into app.observations (org_id, child_id, goal_id, material_id, behavior_enc, prompt_level)
   values (current_setting('t.org1')::uuid, current_setting('t.child1')::uuid, current_setting('t.goal1')::uuid,

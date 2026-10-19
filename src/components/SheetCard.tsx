@@ -12,9 +12,11 @@ interface Props {
   onDuplicate: () => void
   onMove: () => void
   onDelete: () => void
+  /** Cartella del bambino: obiettivi collegati, con il pulsante per cambiarli */
+  goals?: { count: number; onEdit: () => void }
 }
 
-export function SheetCard({ sheet, onOpen, onStatus, onDuplicate, onMove, onDelete }: Props) {
+export function SheetCard({ sheet, onOpen, onStatus, onDuplicate, onMove, onDelete, goals }: Props) {
   const filled = sheet.cells.filter((c) => c.code)
   // Quattro miniature a mosaico, altrimenti solo la prima a tutta grandezza
   const thumbs = filled.length >= 4 ? filled.slice(0, 4) : filled.slice(0, 1)
@@ -43,7 +45,14 @@ export function SheetCard({ sheet, onOpen, onStatus, onDuplicate, onMove, onDele
       </button>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <StatusChip status={sheet.status} onChange={onStatus} />
+        <div className="flex flex-wrap items-center gap-1.5">
+          <StatusChip status={sheet.status} onChange={onStatus} />
+          {goals && (
+            <Button small onClick={goals.onEdit} aria-label={`Obiettivi di ${sheet.title || 'questa scheda'}: ${goals.count}`}>
+              Obiettivi ({goals.count})
+            </Button>
+          )}
+        </div>
         <div className="flex gap-1">
           <Button small onClick={onDuplicate}>
             Duplica

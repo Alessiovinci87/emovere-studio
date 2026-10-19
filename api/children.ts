@@ -7,6 +7,7 @@
 //   DELETE ?id=                 → eliminazione definitiva (solo titolare)
 //   ?resource=profile  POST { childId, section, text, source, recordedOn? } · PATCH { id, … archived? } · DELETE ?id=
 //   ?resource=goals    POST { childId, title, description?, area? } · PATCH { id, …, status?, note? } · DELETE ?id= (titolare)
+//                      → { goal } con lo storico (events); collegare/scollegare materiali lo fa /api/materials
 import { randomUUID } from 'node:crypto'
 import { requireUser } from './_lib/auth.js'
 import { asUser, audit, requireMembership, type Membership, type Tx } from './_lib/db.js'
@@ -22,6 +23,7 @@ import {
   uuid,
   type Body,
 } from './_lib/input.js'
+import { EVENT_COLUMNS, eventOut, type EventRow } from './_lib/goals.js'
 import { sealerFor, type Sealer } from './_lib/keys.js'
 
 const SECTIONS = ['comunicazione', 'autonomie', 'interessi', 'difficolta', 'contesti', 'preferenze', 'rinforzatori', 'uso', 'note'] as const
@@ -123,6 +125,13 @@ function goalOut(row: GoalRow, s: Sealer) {
   }
 }
 
+/** Obiettivo con il suo storico (dopo una modifica: niente lettura in più nel registro) */
+async function goalWithEvents(tx: Tx, row: GoalRow, s: Sealer) {
+  const events = await tx<EventRow[]>`
+    select ${tx.unsafe(EVENT_COLUMNS)} from app.goal_events e where e.goal_id = ${row.id} order by e.created_at, e.id`
+  return { ...goalOut(row, s), events: events.map((e) => eventOut(e, s)) }
+}
+
 /** Utente, centro e chiave del centro: il punto di partenza di ogni operazione. */
 async function context(tx: Tx, userId: string, role?: Membership['role']) {
   const membership = await requireMembership(tx, userId, role)
@@ -172,29 +181,17 @@ export function GET(request: Request): Promise<Response> {
           where child_id = ${row.id} order by section, recorded_on, created_at`
         const goals = await tx<GoalRow[]>`
           select ${tx.unsafe(GOAL_COLUMNS)} from app.goals where child_id = ${row.id} order by status, started_on desc`
-        const events = await tx<
-          { id: string; goal_id: string; kind: string; from_status: string | null; to_status: string | null; note_enc: string | null; author_id: string | null; created_at: Date }[]
-        >`
-          select e.id, e.goal_id, e.kind, e.from_status, e.to_status, e.note_enc, e.author_id, e.created_at
+        const events = await tx<EventRow[]>`
+          select ${tx.unsafe(EVENT_COLUMNS)}
           from app.goal_events e join app.goals g on g.id = e.goal_id
-          where g.child_id = ${row.id} order by e.created_at`
+          where g.child_id = ${row.id} order by e.created_at, e.id`
         await audit(tx, { orgId, action: 'legge', entity: 'children', entityId: row.id, childId: row.id })
         return {
           child: childOut(row, s, realName === undefined ? {} : { realName }),
           profile: entries.map((e) => entryOut(e, s)),
           goals: goals.map((g) => ({
             ...goalOut(g, s),
-            events: events
-              .filter((e) => e.goal_id === g.id)
-              .map((e) => ({
-                id: e.id,
-                kind: e.kind,
-                fromStatus: e.from_status,
-                toStatus: e.to_status,
-                note: s.open(e.note_enc, 'goal_events', 'note_enc', e.id),
-                authorId: e.author_id,
-                createdAt: e.created_at,
-              })),
+            events: events.filter((e) => e.goal_id === g.id).map((e) => eventOut(e, s)),
           })),
         }
       }),
@@ -431,7 +428,7 @@ async function createGoal(userId: string, body: Body) {
       returning ${tx.unsafe(GOAL_COLUMNS)}`
     await tx`insert into app.goal_events (org_id, goal_id, kind, to_status) values (${orgId}, ${id}, 'creato', 'attivo')`
     await audit(tx, { orgId, action: 'crea', entity: 'goals', entityId: id, childId })
-    return { goal: goalOut(row, s) }
+    return { goal: await goalWithEvents(tx, row, s) }
   })
 }
 
@@ -478,7 +475,7 @@ async function updateGoal(userId: string, body: Body) {
       childId: before.child_id,
       details: { fields: Object.keys(updates), ...(note ? { note: true } : {}) },
     })
-    return { goal: goalOut(row, s) }
+    return { goal: await goalWithEvents(tx, row, s) }
   })
 }
 
@@ -503,11 +500,9 @@ async function exportChild(tx: Tx, orgId: string, id: string, s: Sealer) {
   const entries = await tx<EntryRow[]>`
     select ${tx.unsafe(ENTRY_COLUMNS)} from app.child_profile_entries where child_id = ${id} order by section, recorded_on, created_at`
   const goals = await tx<GoalRow[]>`select ${tx.unsafe(GOAL_COLUMNS)} from app.goals where child_id = ${id} order by started_on`
-  const events = await tx<
-    { id: string; goal_id: string; kind: string; from_status: string | null; to_status: string | null; note_enc: string | null; created_at: Date }[]
-  >`
-    select e.id, e.goal_id, e.kind, e.from_status, e.to_status, e.note_enc, e.created_at
-    from app.goal_events e join app.goals g on g.id = e.goal_id where g.child_id = ${id} order by e.created_at`
+  const events = await tx<EventRow[]>`
+    select ${tx.unsafe(EVENT_COLUMNS)}
+    from app.goal_events e join app.goals g on g.id = e.goal_id where g.child_id = ${id} order by e.created_at, e.id`
   const materials = await tx<
     {
       id: string
@@ -549,15 +544,7 @@ async function exportChild(tx: Tx, orgId: string, id: string, s: Sealer) {
     profile: entries.map((e) => entryOut(e, s)),
     goals: goals.map((g) => ({
       ...goalOut(g, s),
-      events: events
-        .filter((e) => e.goal_id === g.id)
-        .map((e) => ({
-          kind: e.kind,
-          fromStatus: e.from_status,
-          toStatus: e.to_status,
-          note: s.open(e.note_enc, 'goal_events', 'note_enc', e.id),
-          createdAt: e.created_at,
-        })),
+      events: events.filter((e) => e.goal_id === g.id).map((e) => eventOut(e, s)),
     })),
     materials: materials.map((m) => ({
       id: m.id,

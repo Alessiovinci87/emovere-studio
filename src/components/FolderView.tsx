@@ -1,10 +1,8 @@
 import { useState } from 'react'
-import type { ExportContext } from '../lib/exportPdf'
 import { statuses } from '../lib/sheet'
 import type { Folder, Sheet, SheetStatus } from '../types'
 import { Page, SectionHeader } from './AppShell'
 import { FolderNameDialog } from './FoldersView'
-import { ChildDataActions } from './ChildDataActions'
 import { SheetCard } from './SheetCard'
 import { Button, NotesField } from './ui'
 
@@ -23,11 +21,9 @@ interface Props {
   onDuplicate: (id: string) => void
   onMove: (id: string) => void
   onDeleteSheet: (id: string) => void
-  /** Solo titolare: esportazione dei dati ed eliminazione definitiva */
-  owner?: { exportContext: ExportContext; onDeleted: () => void }
 }
 
-export function FolderView({ folder, generic, sheets, owner, onBack, onRename, onNotes, onDelete, onNewSheet, onOpenSheet, ...actions }: Props) {
+export function FolderView({ folder, generic, sheets, onBack, onRename, onNotes, onDelete, onNewSheet, onOpenSheet, ...actions }: Props) {
   const [renaming, setRenaming] = useState(false)
   const groups = statuses
     .map((s) => ({ ...s, sheets: sheets.filter((sh) => sh.status === s.id).sort((a, b) => b.updatedAt - a.updatedAt) }))
@@ -111,12 +107,6 @@ export function FolderView({ folder, generic, sheets, owner, onBack, onRename, o
               {folder.code && <p className="text-xs font-bold text-muted">Codice interno {folder.code}</p>}
               <NotesField value={folder.notes} onChange={onNotes} />
             </div>
-            {owner && (
-              <div className="flex flex-col gap-2 rounded-3xl bg-white p-6 shadow-sm">
-                <h3 className="font-bold">Dati del bambino</h3>
-                <ChildDataActions folder={folder} exportContext={owner.exportContext} onDeleted={owner.onDeleted} />
-              </div>
-            )}
           </aside>
         )}
       </div>

@@ -3,10 +3,14 @@ import { useCallback, useEffect, useState } from 'react'
 // Ogni schermata ha il suo URL. La navigazione usa la cronologia del browser, così funzionano
 // il tasto Indietro dell'app, quello del browser e il gesto "indietro" su tablet e telefono.
 
+/** Schede della cartella del bambino (senza scheda: Materiali) */
+export type ChildTab = 'profilo' | 'obiettivi' | 'materiali' | 'note'
+const CHILD_TABS: ChildTab[] = ['profilo', 'obiettivi', 'materiali', 'note']
+
 export type Route =
   | { name: 'oggi' }
   | { name: 'bambini' }
-  | { name: 'cartella'; id: string }
+  | { name: 'cartella'; id: string; tab?: ChildTab }
   /** Cestino: bambini e schede eliminati negli ultimi 30 giorni */
   | { name: 'cestino' }
   | { name: 'crea'; folderId?: string }
@@ -31,7 +35,7 @@ export function toPath(route: Route): string {
     case 'oggi':
       return '/oggi'
     case 'cartella':
-      return `/bambini/${encodeURIComponent(route.id)}`
+      return `/bambini/${encodeURIComponent(route.id)}${route.tab && route.tab !== 'materiali' ? `/${route.tab}` : ''}`
     case 'crea':
       return route.folderId ? `/crea?cartella=${encodeURIComponent(route.folderId)}` : '/crea'
     case 'scheda':
@@ -44,10 +48,13 @@ export function toPath(route: Route): string {
 }
 
 export function parsePath(pathname: string, search = ''): Route {
-  const [first, second] = pathname.split('/').filter(Boolean).map(decodeURIComponent)
+  const [first, second, third] = pathname.split('/').filter(Boolean).map(decodeURIComponent)
   switch (first) {
-    case 'bambini':
-      return second ? { name: 'cartella', id: second } : { name: 'bambini' }
+    case 'bambini': {
+      if (!second) return { name: 'bambini' }
+      const tab = CHILD_TABS.find((t) => t === third)
+      return tab && tab !== 'materiali' ? { name: 'cartella', id: second, tab } : { name: 'cartella', id: second }
+    }
     case 'crea': {
       const folderId = new URLSearchParams(search).get('cartella') ?? undefined
       return { name: 'crea', folderId }

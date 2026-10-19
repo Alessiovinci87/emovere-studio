@@ -540,6 +540,41 @@ assert.equal(r.body.entries[0].user, null, 'pulizia automatica: senza utente')
 assert.equal(r.body.entries[0].details.automatico, true)
 delete process.env.CRON_SECRET
 
+// ——— Fase 1: collegamenti nello storico degli obiettivi ———
+r = await call(children, 'POST', '/api/children?resource=goals', tb, { childId: child.id, title: 'Lavarsi le mani' })
+const goalB = r.body.goal
+assert.deepEqual(goalB.events.map((e) => e.kind), ['creato'], 'il nuovo obiettivo arriva con lo storico')
+r = await call(children, 'PATCH', '/api/children?resource=goals', tb, { id: goalB.id, note: 'Inizia con il modello' })
+assert.deepEqual(r.body.goal.events.map((e) => e.kind), ['creato', 'nota'])
+assert.equal(r.body.goal.events[1].note, 'Inizia con il modello')
+r = await call(materials, 'POST', '/api/materials', tb, { childId: child.id, title: 'Le mani pulite', content: {} })
+const linkMat = r.body.material
+r = await call(materials, 'PATCH', '/api/materials', tb, { id: linkMat.id, goalIds: [goal.id, goalB.id] })
+assert.equal(r.status, 200, JSON.stringify(r.body))
+assert.deepEqual(r.body.material.goalIds.sort(), [goal.id, goalB.id].sort())
+assert.deepEqual(
+  r.body.goalEvents.map((g) => [g.goalId, g.event.materialAction, g.event.materialTitle]).sort(),
+  [[goal.id, 'collegato', 'Le mani pulite'], [goalB.id, 'collegato', 'Le mani pulite']].sort(),
+)
+r = await call(materials, 'PATCH', '/api/materials', tb, { id: linkMat.id, goalIds: [goalB.id] })
+assert.deepEqual(r.body.goalEvents.map((g) => [g.goalId, g.event.materialAction]), [[goal.id, 'scollegato']], 'solo ciò che cambia')
+r = await call(materials, 'PATCH', '/api/materials', tb, { id: linkMat.id, goalIds: [goalB.id] })
+assert.deepEqual(r.body.goalEvents, [], 'nessun cambiamento, nessun evento')
+r = await call(children, 'GET', `/api/children?id=${child.id}`, tb)
+const historyB = r.body.goals.find((g) => g.id === goalB.id).events
+assert.deepEqual(historyB.map((e) => e.materialAction ?? e.kind), ['creato', 'nota', 'collegato'])
+// Spostata in un altro bambino: scollegata (nello storico) e senza obiettivi
+r = await call(materials, 'PATCH', '/api/materials', tb, { id: linkMat.id, childId: myChildId })
+assert.deepEqual(r.body.goalEvents.map((g) => [g.goalId, g.event.materialAction]), [[goalB.id, 'scollegato']])
+assert.deepEqual(r.body.material.goalIds, [])
+// Obiettivo di un altro bambino: rifiutato, niente storico
+r = await call(materials, 'PATCH', '/api/materials', tb, { id: linkMat.id, goalIds: [goalB.id] })
+assert.equal(r.status, 404)
+const [{ links }] = await sql`select count(*)::int as links from app.goal_events where kind = 'materiale' and goal_id = ${goalB.id}`
+assert.equal(links, 2)
+r = await call(children, 'GET', `/api/children?id=${child.id}&export=1`, ta)
+assert.ok(r.body.goals.find((g) => g.id === goalB.id).events.some((e) => e.materialTitle === 'Le mani pulite'), 'anche nell’esportazione')
+
 console.log('API: tutti i test superati')
 await sql.end()
 server.close()

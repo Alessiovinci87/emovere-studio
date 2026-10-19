@@ -7,7 +7,9 @@
 //   POST ?action=duplicate { id, childId? }             → { material }  copia che riparte da "Da fare"
 //   POST ?action=version   { id, reason }               → { versionNo }  ('export' | 'manuale')
 //   PATCH  { id, baseRevision?, title?, content?, status?, notes?, reminder?, opened?, childId?, goalIds?, trashed? }
-//          → { material }  oppure 409 { conflict: true, current } se titolo/contenuto sono cambiati altrove
+//          → { material, goalEvents }  oppure 409 { conflict: true, current } se titolo/contenuto sono cambiati altrove
+//          goalIds sostituisce i collegamenti agli obiettivi; ogni collegamento aggiunto o tolto (anche spostando la
+//          scheda in un altro bambino) finisce nello storico dell'obiettivo: goalEvents = [{ goalId, event }]
 //   DELETE ?id=                  → eliminazione definitiva (solo titolare; gli altri usano il cestino)
 //
 // Il contenuto (lo Sheet dell'app) arriva senza i campi che stanno in colonne proprie: il server toglie
@@ -17,6 +19,7 @@ import { requireUser } from './_lib/auth.js'
 import { asUser, audit, requireMembership, type Tx } from './_lib/db.js'
 import { UserError, handle, json } from './_lib/http.js'
 import { defined, optBool, optOneOf, optText, readBody, uuid, type Body } from './_lib/input.js'
+import { eventOut, type EventRow } from './_lib/goals.js'
 import { sealerFor, type Sealer } from './_lib/keys.js'
 
 const KINDS = ['scheda', 'storia_sociale', 'scenario', 'sequenza', 'guida', 'caa', 'rinforzo', 'attivita'] as const
@@ -261,6 +264,24 @@ export function PATCH(request: Request): Promise<Response> {
             values (${id}, ${goalId}, ${targetChild}, ${orgId})`
         }
       }
+      // Storico degli obiettivi: collegamenti aggiunti e tolti (spostando la scheda si tolgono tutti)
+      const goalEvents: { goalId: string; event: ReturnType<typeof eventOut> }[] = []
+      if (moving || goalIds !== undefined) {
+        const after = goalIds ?? []
+        const changes = [
+          ...before.goal_ids.filter((g) => moving || !after.includes(g)).map((g) => [g, 'scollegato'] as const),
+          ...after.filter((g) => moving || !before.goal_ids.includes(g)).map((g) => [g, 'collegato'] as const),
+        ]
+        const materialTitle = (title === undefined ? before.title : (title ?? '')) || 'Senza titolo'
+        for (const [goalId, action] of changes) {
+          const [event] = await tx<EventRow[]>`
+            insert into app.goal_events (org_id, goal_id, kind, material_id, material_title, material_action)
+            values (${orgId}, ${goalId}, 'materiale', ${id}, ${materialTitle}, ${action})
+            returning id, goal_id, kind, from_status, to_status, note_enc, material_id, material_title, material_action,
+                      author_id, created_at`
+          goalEvents.push({ goalId, event: eventOut(event, s) })
+        }
+      }
       // Passando a "Pronta" si conserva una copia fissa
       if (status === 'pronta' && before.status !== 'pronta') {
         await tx`
@@ -278,7 +299,7 @@ export function PATCH(request: Request): Promise<Response> {
           details: { fields: [...Object.keys(updates), ...(goalIds ? ['goal_ids'] : [])] },
         })
       }
-      return json({ material: materialOut(await load(tx, orgId, id), s, true) })
+      return json({ material: materialOut(await load(tx, orgId, id), s, true), goalEvents })
     })
   })
 }

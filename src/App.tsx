@@ -33,6 +33,7 @@ import { SettingsView } from './views/SettingsView'
 import { GuideScreen } from './views/GuideEditor'
 import { TodayView } from './views/TodayView'
 import { TrashView } from './views/TrashView'
+import { ChildView } from './views/ChildView'
 
 type FolderAction = { mode: 'save' } | { mode: 'duplicate'; sheetId: string } | { mode: 'move'; sheetId: string }
 type FolderChoice = { folderId: string } | { newName: string }
@@ -410,32 +411,32 @@ Non si può annullare.`)) return
         const folder = data.folders.find((f) => f.id === route.id)
         if (!folder) return <Missing text="Questa cartella non esiste più." onBack={() => navigate({ name: 'bambini' })} />
         return (
-          <FolderView
+          <ChildView
             key={folder.id}
             folder={folder}
             sheets={data.sheets.filter((s) => s.folderId === folder.id)}
+            tab={route.tab ?? 'materiali'}
+            isOwner={isOwner}
+            exportContext={{ settings, coloringKeys }}
+            sheetActions={{
+              onOpen: openSheet,
+              onStatus: (id, status) => setData((d) => store.setStatus(d, id, status)),
+              onDuplicate: (id) => setFolderAction({ mode: 'duplicate', sheetId: id }),
+              onMove: (id) => setFolderAction({ mode: 'move', sheetId: id }),
+              onDelete: (id) => setData((d) => store.deleteSheet(d, id)),
+            }}
+            // Le schede della cartella cambiano l'URL senza nuove voci: Indietro torna a Bambini
+            onTab={(tab) => navigate({ name: 'cartella', id: folder.id, tab }, { replace: true })}
             onBack={() => back({ name: 'bambini' })}
             onRename={(name) => setData((d) => store.updateFolder(d, folder.id, { name }))}
             onNotes={(notes) => setData((d) => store.updateFolder(d, folder.id, { notes }))}
-            onDelete={() => deleteFolder(folder.id)}
+            onTrash={() => deleteFolder(folder.id)}
             onNewSheet={() => navigate({ name: 'crea', folderId: folder.id })}
-            onOpenSheet={openSheet}
-            onStatus={(id, status) => setData((d) => store.setStatus(d, id, status))}
-            onDuplicate={(id) => setFolderAction({ mode: 'duplicate', sheetId: id })}
-            onMove={(id) => setFolderAction({ mode: 'move', sheetId: id })}
-            onDeleteSheet={(id) => setData((d) => store.deleteSheet(d, id))}
-            owner={
-              isOwner
-                ? {
-                    exportContext: { settings, coloringKeys },
-                    // Già eliminato sul server: si toglie dai dati dell'app (il cestino risponde 404, va bene)
-                    onDeleted: () => {
-                      deleteFolder(folder.id)
-                      setToast(`“${folder.name}” eliminato per sempre`)
-                    },
-                  }
-                : undefined
-            }
+            // Già eliminato sul server: si toglie dai dati dell'app (il cestino risponde 404, va bene)
+            onDeleted={() => {
+              deleteFolder(folder.id)
+              setToast(`“${folder.name}” eliminato per sempre`)
+            }}
           />
         )
       }
