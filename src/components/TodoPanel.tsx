@@ -26,7 +26,7 @@ export function TodoList({ items, backup, onBackup, onOpen, onDone }: Props) {
               {backup.lastExport
                 ? `Ultimo backup il ${new Date(backup.lastExport).toLocaleDateString('it-IT')}: sono passati più di 7 giorni.`
                 : 'Non hai ancora mai fatto un backup.'}{' '}
-              Le schede restano solo in questo browser.
+              Le schede sono salvate sul server del centro: il backup è una copia in più sul tuo computer.
             </span>
           </div>
           <Button tone="primary" onClick={onBackup}>

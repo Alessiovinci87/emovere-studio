@@ -1,3 +1,4 @@
+import { useNoteDetail } from '../lib/appNotes'
 import { useEffect, useId, useRef, useState } from 'react'
 import { SourceChip, ErrorText } from '../components/child/ProfileTab'
 import { CharacterToggle } from '../components/CharacterToggle'
@@ -154,6 +155,8 @@ export function NewMaterialView(props: Props) {
       profilo: childId === null ? 'Anteprima' : 'Dati del profilo',
       proposta: 'Proposta',
     })[id]
+
+  useNoteDetail(`passo ${stepLabel(step)}`)
 
   function close() {
     const typed = situation.trim() || freeGoal.trim() || newGoal.title.trim() || proposal

@@ -281,6 +281,43 @@ select pg_temp.ok((
       or (entity = 'children' and entity_id = current_setting('t.child2')::uuid))
 ) = 2, 'pulizia automatica nel registro, senza utente');
 
+-- ——— Appunti sull'app ———
+set role emovere_app;
+select set_config('app.user_id', '00000000-0000-0000-0000-00000000000b', false);
+with x as (
+  insert into app.app_notes (org_id, screen, context, kind, text_enc)
+  values (current_setting('t.org1')::uuid, 'nuovo', 'Parametri', 'idea', :enc) returning id
+) select set_config('t.note1', id::text, false) from x;
+select pg_temp.expect_error(format(
+  $q$insert into app.app_notes (org_id, screen, kind, text_enc) values (%L, 'oggi', 'idea', 'testo in chiaro')$q$,
+  current_setting('t.org1')), '23514');
+select pg_temp.expect_error(format(
+  $q$insert into app.app_notes (org_id, screen, kind, text_enc, status) values (%L, 'oggi', 'idea', %L, 'fatto')$q$,
+  current_setting('t.org1'), :enc), '42501');
+select pg_temp.expect_error(format(
+  $q$insert into app.app_notes (org_id, author_id, screen, kind, text_enc) values (%L, '00000000-0000-0000-0000-00000000000a', 'oggi', 'idea', %L)$q$,
+  current_setting('t.org1'), :enc), '42501');
+select pg_temp.expect_error(format(
+  $q$update app.app_notes set status = 'fatto' where id = %L$q$, current_setting('t.note1')), '42501');
+update app.app_notes set kind = 'problema' where id = current_setting('t.note1')::uuid;
+select pg_temp.ok((select kind = 'problema' from app.app_notes where id = current_setting('t.note1')::uuid), 'l''autore modifica il suo appunto');
+
+select set_config('app.user_id', '00000000-0000-0000-0000-00000000000a', false);
+select pg_temp.ok((select count(*) from app.app_notes) = 1, 'il titolare vede gli appunti del centro');
+select pg_temp.expect_error(format(
+  $q$update app.app_notes set kind = 'idea' where id = %L$q$, current_setting('t.note1')), '42501');
+update app.app_notes set status = 'fatto', reply_enc = :enc where id = current_setting('t.note1')::uuid;
+select pg_temp.ok((select status = 'fatto' from app.app_notes where id = current_setting('t.note1')::uuid), 'il titolare cambia stato e risponde');
+
+select set_config('app.user_id', '00000000-0000-0000-0000-00000000000c', false);
+select pg_temp.ok((select count(*) from app.app_notes) = 0, 'un altro centro non vede gli appunti');
+delete from app.app_notes where id = current_setting('t.note1')::uuid;
+select set_config('app.user_id', '00000000-0000-0000-0000-00000000000b', false);
+select pg_temp.ok((select count(*) from app.app_notes) = 1, 'un altro centro non li elimina');
+delete from app.app_notes where id = current_setting('t.note1')::uuid;
+select pg_temp.ok((select count(*) from app.app_notes) = 0, 'l''autore elimina il suo appunto');
+reset role;
+
 -- Eliminare un centro elimina tutto, senza bloccarsi sul "titolare unico"
 delete from app.organizations where id = current_setting('t.org1')::uuid;
 select pg_temp.ok((select count(*) from app.children where org_id = current_setting('t.org1')::uuid) = 0, 'centro eliminato con tutti i dati');

@@ -2,6 +2,9 @@
 //   PATCH { privacyVerified?: boolean, dataController?: string, settings?: {…} } → { privacyVerifiedAt, dataController, settings }
 //   GET ?resource=audit [&before={id}&child={id}&user={id}&action=…] → { entries, next }  (solo titolare, 100 per volta)
 //   GET ?action=purge  → { childrenDeleted, materialsDeleted }  solo Vercel Cron (Authorization: Bearer CRON_SECRET)
+//   Appunti sull'app (api/_lib/notes.ts), tutti i membri:
+//   GET ?resource=notes → { notes }   POST ?resource=notes { screen, context?, kind, text } → { note }
+//   PATCH ?resource=notes { id, kind?, text? (autore), status?, reply? (titolare) } → { note }   DELETE ?resource=notes&id= (autore o titolare)
 // settings: impostazioni dell'app per tutto il centro (logo come immagine PNG ridotta, nome del centro, stampatello).
 // "Privacy verificata" si attiva solo dopo il parere del consulente (vedi CLAUDE.md, prerequisiti):
 // finché è spenta l'app mostra l'avviso "Solo dati di prova".
@@ -10,6 +13,7 @@ import { env, requireUser } from './_lib/auth.js'
 import { asSystem, asUser, audit, requireMembership } from './_lib/db.js'
 import { UserError, handle, json } from './_lib/http.js'
 import { isUuid } from './_lib/input.js'
+import { createNote, deleteNote, listNotes, updateNote } from './_lib/notes.js'
 
 const AUDIT_ACTIONS = ['crea', 'legge', 'modifica', 'esporta', 'elimina', 'ripristina', 'importa']
 const AUDIT_PAGE = 100
@@ -18,6 +22,7 @@ export function GET(request: Request): Promise<Response> {
   return handle(async () => {
     const params = new URL(request.url).searchParams
     if (params.get('action') === 'purge') return json(await purge(request))
+    if (params.get('resource') === 'notes') return json(await listNotes((await requireUser(request)).id))
     if (params.get('resource') !== 'audit') throw new UserError('Richiesta non valida.')
 
     const user = await requireUser(request)
@@ -92,9 +97,27 @@ async function purge(request: Request) {
   return { childrenDeleted: row.children_deleted, materialsDeleted: row.materials_deleted }
 }
 
+const isNotes = (request: Request) => new URL(request.url).searchParams.get('resource') === 'notes'
+
+export function POST(request: Request): Promise<Response> {
+  return handle(async () => {
+    if (!isNotes(request)) throw new UserError('Richiesta non valida.')
+    return json(await createNote((await requireUser(request)).id, request))
+  })
+}
+
+export function DELETE(request: Request): Promise<Response> {
+  return handle(async () => {
+    if (!isNotes(request)) throw new UserError('Richiesta non valida.')
+    const user = await requireUser(request)
+    return json(await deleteNote(user.id, new URL(request.url).searchParams.get('id') ?? ''))
+  })
+}
+
 export function PATCH(request: Request): Promise<Response> {
   return handle(async () => {
     const user = await requireUser(request)
+    if (isNotes(request)) return json(await updateNote(user.id, request))
     const body = (await request.json().catch(() => null)) as { privacyVerified?: unknown; dataController?: unknown; settings?: unknown } | null
     const privacy = typeof body?.privacyVerified === 'boolean' ? body.privacyVerified : undefined
     const controller = typeof body?.dataController === 'string' ? body.dataController.trim().slice(0, 200) : undefined

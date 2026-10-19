@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Session } from './AuthGate'
 import { AuditLogDialog } from './components/AuditLogDialog'
+import { NotesButton } from './components/AppNotes'
+import { screenOf, useCurrentNoteDetail } from './lib/appNotes'
 import { ImportDialog } from './components/ImportDialog'
 import { accountApi } from './lib/account'
 import { localDataPresent, localImportAvailable, localImportDone, localImportSource, markLocalImported, type ImportSource } from './lib/importLocal'
@@ -90,6 +92,7 @@ function Workspace({ session, server, data }: { session: Session; server: Return
   const { route, depth, navigate, back } = useRouter()
   const { setData, status: sync, resolveConflict } = server
   const isOwner = session.account?.organization?.role === 'titolare'
+  const noteDetail = useCurrentNoteDetail()
   const [importSource, setImportSource] = useState<ImportSource | null>(null)
   const [libraryCharacter, setLibraryCharacter] = useState<Character>('bambina')
 
@@ -532,6 +535,7 @@ Non si può annullare.`)) return
     }
   }
 
+  const noteWhere = screenOf(route, GENERIC_FOLDER_ID)
   return (
     <>
       {route.name === 'nuovo' ? (
@@ -713,6 +717,14 @@ Non si può annullare.`)) return
           onClose={() => setAiOpen(false)}
         />
       )}
+
+      <NotesButton
+        key={noteWhere.screen}
+        screen={noteWhere.screen}
+        context={[noteWhere.context, noteDetail].filter(Boolean).join(' · ')}
+        isOwner={isOwner}
+        onOpenAll={route.name === 'impostazioni' ? undefined : () => navigate({ name: 'impostazioni' })}
+      />
 
       {toast && (
         <div

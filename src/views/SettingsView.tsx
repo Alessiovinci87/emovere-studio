@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import type { Session } from '../AuthGate'
+import { AppNotesSettings } from '../components/AppNotes'
 import { AccountPanel, MembersPanel, PrivacyVerifiedPanel } from '../components/AccountSettings'
 import { Page, SectionHeader } from '../components/AppShell'
 import { Button, PRIVACY_TEXT, inputClass } from '../components/ui'
@@ -182,6 +183,12 @@ export function SettingsView({ session, canEditCenter, localImport, onForgetLoca
             <Button tone="soft" onClick={onOpenAudit} className="self-start">
               Apri il registro
             </Button>
+          </Card>
+        )}
+
+        {session.account?.organization && (
+          <Card title="Appunti sull’app">
+            <AppNotesSettings isOwner={canEditCenter} centerName={settings.centerName || session.account.organization.name} />
           </Card>
         )}
 

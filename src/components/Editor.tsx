@@ -1,3 +1,4 @@
+import { useNoteDetail } from '../lib/appNotes'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { CARD_LABEL, cardMetrics, sheetCards, type CardSize } from './Cards'
 import type { ExportContent, ExportKind } from '../lib/exportPdf'
@@ -60,6 +61,7 @@ export function Editor({
   onNew,
   onClose,
 }: Props) {
+  useNoteDetail(templates[sheet.template].label)
   const [panelOpen, setPanelOpen] = useState(true)
   /** Telefono: pannello opzioni che sale dal basso */
   const [sheetOpen, setSheetOpen] = useState(false)
