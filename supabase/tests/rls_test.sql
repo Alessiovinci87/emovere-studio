@@ -318,6 +318,17 @@ delete from app.app_notes where id = current_setting('t.note1')::uuid;
 select pg_temp.ok((select count(*) from app.app_notes) = 0, 'l''autore elimina il suo appunto');
 reset role;
 
+-- Keep-alive: solo anon, security definer con search_path fissato
+select pg_temp.ok((select prosecdef and proconfig @> array['search_path=""']
+  from pg_proc where oid = 'public.keepalive()'::regprocedure), 'keepalive è security definer con search_path fissato');
+grant execute on function pg_temp.ok(boolean, text) to anon;
+set role anon;
+select pg_temp.ok((select public.keepalive() is not null), 'anon chiama keepalive');
+reset role;
+set role authenticated;
+select pg_temp.expect_error('select public.keepalive()', '42501');
+reset role;
+
 -- Eliminare un centro elimina tutto, senza bloccarsi sul "titolare unico"
 delete from app.organizations where id = current_setting('t.org1')::uuid;
 select pg_temp.ok((select count(*) from app.children where org_id = current_setting('t.org1')::uuid) = 0, 'centro eliminato con tutti i dati');

@@ -1,0 +1,38 @@
+# Keep-alive del progetto Supabase (piano Free: pausa dopo 7 giorni senza attività).
+# Chiama public.keepalive() (migrazione 20261028090000_keepalive.sql) con la chiave publishable/anon.
+# Secrets del repository: SUPABASE_URL, SUPABASE_ANON_KEY. Mai la chiave service_role/secret.
+name: Supabase keep-alive
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Chiama public.keepalive()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "::error::Mancano i secrets SUPABASE_URL o SUPABASE_ANON_KEY"
+            exit 1
+          fi
+          status=$(curl -sS --max-time 30 -o response.txt -w '%{http_code}' \
+            -X POST "${SUPABASE_URL%/}/rest/v1/rpc/keepalive" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{}') || status=000
+          echo "HTTP $status"
+          cat response.txt 2>/dev/null; echo
+          case "$status" in
+            2??) ;;
+            *) echo "::error::Keep-alive fallito (HTTP $status)"; exit 1 ;;
+          esac
