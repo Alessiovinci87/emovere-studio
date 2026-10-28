@@ -110,7 +110,7 @@ Strumento per comporre schede visive (routine, storie sociali, prima/poi, scelte
 ## Keep-alive Supabase
 - Il piano Free mette in pausa il progetto dopo 7 giorni senza attività: una GitHub Action (`.github/workflows/supabase-keepalive.yml`) ogni giorno alle 06:17 UTC (o a mano: Actions → "Supabase keep-alive" → Run workflow) chiama `POST /rest/v1/rpc/keepalive`; se la risposta non è 2xx il job fallisce e GitHub manda l'email
 - `public.keepalive()` (migrazione `20261028090000_keepalive.sql`) restituisce solo `now()`: `security definer`, `search_path` vuoto, eseguibile solo da `anon`; non legge né scrive dati
-- Secrets del repository GitHub (Settings → Secrets and variables → Actions): `SUPABASE_URL` (`https://vrlryycceswltabasogi.supabase.co`) e `SUPABASE_ANON_KEY` (chiave publishable o anon). **Mai** la chiave secret/service_role
+- Secrets del repository GitHub (Settings → Secrets and variables → Actions): `SUPABASE_URL` (`https://vrlryycceswltabasogi.supabase.co`) e `SUPABASE_ANON_KEY` = chiave **anon legacy (JWT)**, da Project Settings → API Keys → "Legacy API keys": con la publishable (`sb_publishable_…`) la chiamata risponde 401. **Mai** la chiave secret/service_role
 - GitHub sospende i cron dei repository senza commit da 60 giorni (avvisa per email): basta riattivare il workflow. Con Supabase Pro il keep-alive non serve più
 
 ## Obiettivo di questa fase

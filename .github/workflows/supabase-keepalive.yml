@@ -1,6 +1,7 @@
 # Keep-alive del progetto Supabase (piano Free: pausa dopo 7 giorni senza attività).
-# Chiama public.keepalive() (migrazione 20261028090000_keepalive.sql) con la chiave publishable/anon.
-# Secrets del repository: SUPABASE_URL, SUPABASE_ANON_KEY. Mai la chiave service_role/secret.
+# Chiama public.keepalive() (migrazione 20261028090000_keepalive.sql) con la chiave anon.
+# Secrets del repository: SUPABASE_URL, SUPABASE_ANON_KEY (chiave anon legacy JWT: la publishable dà 401).
+# Mai la chiave service_role/secret.
 name: Supabase keep-alive
 
 on:
