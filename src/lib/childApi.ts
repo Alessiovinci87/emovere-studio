@@ -1,5 +1,6 @@
 // Cartella del bambino sul server (/api/children e /api/materials): profilo, obiettivi con storico,
 // collegamenti tra materiali e obiettivi. Ogni apertura della cartella finisce nel registro degli accessi.
+import type { ObservationContext, PromptLevel } from '../config/observations'
 import type { GoalArea, GoalStatus, ProfileSection, ProfileSource } from '../config/profile'
 import { call, send } from './account'
 import type { ServerMaterial } from './materials'
@@ -78,6 +79,61 @@ export const childApi = {
       '/api/materials',
       send('PATCH', { id: materialId, goalIds }),
     ),
+}
+
+// ——— Osservazioni ———
+
+export interface Observation {
+  id: string
+  childId: string
+  goalId: string | null
+  materialId: string | null
+  observedAt: string
+  context: ObservationContext | null
+  promptLevel: PromptLevel | null
+  frequency: number | null
+  durationSeconds: number | null
+  antecedent: string | null
+  behavior: string | null
+  consequence: string | null
+  materialResponse: string | null
+  operatorNotes: string | null
+  interpretation: string | null
+  authorId: string | null
+  authorName: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type ObservationInput = Partial<
+  Pick<
+    Observation,
+    | 'goalId'
+    | 'materialId'
+    | 'observedAt'
+    | 'context'
+    | 'promptLevel'
+    | 'frequency'
+    | 'durationSeconds'
+    | 'antecedent'
+    | 'behavior'
+    | 'consequence'
+    | 'materialResponse'
+    | 'operatorNotes'
+    | 'interpretation'
+  >
+>
+
+const OBS_URL = '/api/children?resource=observations'
+
+export const observationsApi = {
+  /** Lettura registrata nel registro degli accessi */
+  list: async (childId: string) => (await call<{ observations: Observation[] }>(`${OBS_URL}&childId=${id(childId)}`)).observations,
+  add: async (childId: string, input: ObservationInput) =>
+    (await call<{ observation: Observation }>(OBS_URL, send('POST', { childId, ...input }))).observation,
+  update: async (obsId: string, input: ObservationInput) =>
+    (await call<{ observation: Observation }>(OBS_URL, send('PATCH', { id: obsId, ...input }))).observation,
+  remove: (obsId: string) => call<{ ok: true }>(`${OBS_URL}&id=${id(obsId)}`, send('DELETE')),
 }
 
 /** Data AAAA-MM-GG di oggi (fuso del dispositivo) */

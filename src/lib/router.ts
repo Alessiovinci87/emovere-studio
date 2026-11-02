@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState } from 'react'
 // il tasto Indietro dell'app, quello del browser e il gesto "indietro" su tablet e telefono.
 
 /** Schede della cartella del bambino (senza scheda: Materiali) */
-export type ChildTab = 'profilo' | 'obiettivi' | 'materiali' | 'note'
-const CHILD_TABS: ChildTab[] = ['profilo', 'obiettivi', 'materiali', 'note']
+export type ChildTab = 'profilo' | 'obiettivi' | 'materiali' | 'osservazioni' | 'note'
+const CHILD_TABS: ChildTab[] = ['profilo', 'obiettivi', 'materiali', 'osservazioni', 'note']
 
 export type Route =
   | { name: 'oggi' }

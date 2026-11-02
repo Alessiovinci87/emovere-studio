@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Page, SectionHeader } from '../components/AppShell'
 import { ChildDataActions } from '../components/ChildDataActions'
 import { GoalsTab } from '../components/child/GoalsTab'
+import { ObservationsTab } from '../components/child/ObservationsTab'
 import { MaterialsTab, type SheetActions } from '../components/child/MaterialsTab'
 import { ErrorText, ProfileTab } from '../components/child/ProfileTab'
 import { FolderNameDialog } from '../components/FoldersView'
@@ -21,6 +22,7 @@ const TABS: { id: ChildTab; label: string }[] = [
   { id: 'profilo', label: 'Profilo' },
   { id: 'obiettivi', label: 'Obiettivi' },
   { id: 'materiali', label: 'Materiali' },
+  { id: 'osservazioni', label: 'Osservazioni' },
   { id: 'note', label: 'Note' },
 ]
 
@@ -169,7 +171,7 @@ export function ChildView({ folder, sheets, tab, isOwner, exportContext, sheetAc
           </Button>
         </div>
       )}
-      {!detail && !error && (tab === 'profilo' || tab === 'obiettivi') && <p className="text-muted">Caricamento…</p>}
+      {!detail && !error && (tab === 'profilo' || tab === 'obiettivi' || tab === 'osservazioni') && <p className="text-muted">Caricamento…</p>}
 
       {tab === 'profilo' && detail && (
         <ProfileTab child={detail.child} entries={detail.profile} onChild={(child) => setDetail((d) => (d ? { ...d, child } : d))} onEntries={setEntries} />
@@ -198,6 +200,13 @@ export function ChildView({ folder, sheets, tab, isOwner, exportContext, sheetAc
             onSetGoals={setMaterialGoals}
           />
         </>
+      )}
+      {tab === 'osservazioni' && detail && (
+        <ObservationsTab
+          childId={folder.id}
+          goals={detail.goals}
+          materials={[...sheets.map((s) => ({ id: s.id, title: s.title || 'Senza titolo' })), ...guides.map((g) => ({ id: g.id, title: g.title }))]}
+        />
       )}
       {tab === 'note' && (
         <div className="grid max-w-3xl gap-6">

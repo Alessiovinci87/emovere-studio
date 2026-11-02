@@ -8,6 +8,9 @@
 //   ?resource=profile  POST { childId, section, text, source, recordedOn? } · PATCH { id, … archived? } · DELETE ?id=
 //   ?resource=goals    POST { childId, title, description?, area? } · PATCH { id, …, status?, note? } · DELETE ?id= (titolare)
 //                      → { goal } con lo storico (events); collegare/scollegare materiali lo fa /api/materials
+//   ?resource=observations  GET ?childId= → { observations } (lettura registrata) · POST { childId, goalId?, materialId?, observedAt?,
+//                      context?, antecedent?, behavior?, consequence?, promptLevel?, frequency?, durationSeconds?, materialResponse?,
+//                      operatorNotes?, interpretation? } · PATCH { id, … } · DELETE ?id= (autore o titolare) → { observation }
 import { randomUUID } from 'node:crypto'
 import { requireUser } from './_lib/auth.js'
 import { asUser, audit, requireMembership, type Membership, type Tx } from './_lib/db.js'
@@ -18,6 +21,7 @@ import {
   optDate,
   optOneOf,
   optText,
+  optUuid,
   readBody,
   reqText,
   uuid,
@@ -145,6 +149,8 @@ export function GET(request: Request): Promise<Response> {
     const user = await requireUser(request)
     const params = new URL(request.url).searchParams
     const id = params.get('id')
+    if (params.get('resource') === 'observations') return json(await listObservations(user.id, uuid(params.get('childId'))))
+    if (params.get('resource') !== null) throw new UserError('Richiesta non valida.')
     return json(
       await asUser(user.id, async (tx) => {
         const { orgId, role, s } = await context(tx, user.id)
@@ -206,6 +212,7 @@ export function POST(request: Request): Promise<Response> {
     const body = await readBody(request)
     if (resource === 'profile') return json(await createEntry(user.id, body))
     if (resource === 'goals') return json(await createGoal(user.id, body))
+    if (resource === 'observations') return json(await saveObservation(user.id, body, true))
     if (resource !== null) throw new UserError('Richiesta non valida.')
 
     const pseudonym = reqText(body, 'pseudonym', 60, 'Il nome o lo pseudonimo')
@@ -257,6 +264,7 @@ export function PATCH(request: Request): Promise<Response> {
     const body = await readBody(request)
     if (resource === 'profile') return json(await updateEntry(user.id, body))
     if (resource === 'goals') return json(await updateGoal(user.id, body))
+    if (resource === 'observations') return json(await saveObservation(user.id, body, false))
     if (resource !== null) throw new UserError('Richiesta non valida.')
 
     const id = uuid(body.id)
@@ -334,6 +342,19 @@ export function DELETE(request: Request): Promise<Response> {
             delete from app.child_profile_entries where id = ${id} and org_id = ${orgId} returning child_id`
           if (!row) throw new UserError('Voce del profilo non trovata.', 404)
           await audit(tx, { orgId, action: 'elimina', entity: 'child_profile_entries', entityId: id, childId: row.child_id })
+          return { ok: true }
+        }
+        if (resource === 'observations') {
+          // Un'osservazione registrata per errore: la elimina chi l'ha scritta o il titolare
+          const { orgId, role } = await requireMembership(tx, user.id)
+          const [row] = await tx<{ child_id: string; author_id: string | null }[]>`
+            select child_id, author_id from app.observations where id = ${id} and org_id = ${orgId}`
+          if (!row) throw new UserError('Osservazione non trovata.', 404)
+          if (role !== 'titolare' && row.author_id !== user.id) {
+            throw new UserError('Solo chi ha scritto l’osservazione o il titolare può eliminarla.', 403)
+          }
+          await tx`delete from app.observations where id = ${id}`
+          await audit(tx, { orgId, action: 'elimina', entity: 'observations', entityId: id, childId: row.child_id })
           return { ok: true }
         }
         // Eliminazioni definitive di obiettivi e bambini: solo il titolare (gli altri usano archivio e cestino)
@@ -476,6 +497,165 @@ async function updateGoal(userId: string, body: Body) {
       details: { fields: Object.keys(updates), ...(note ? { note: true } : {}) },
     })
     return { goal: await goalWithEvents(tx, row, s) }
+  })
+}
+
+// ——— Osservazioni (specifica, sezione 13): dati registrati separati da note e interpretazioni ———
+
+const OBS_CONTEXTS = ['studio', 'casa', 'scuola', 'altro'] as const
+const PROMPT_LEVELS = ['autonomo', 'verbale', 'gestuale', 'modello', 'fisico_parziale', 'fisico_totale'] as const
+
+interface ObservationRow {
+  id: string
+  child_id: string
+  goal_id: string | null
+  material_id: string | null
+  observed_at: Date
+  context: string | null
+  prompt_level: string | null
+  frequency: number | null
+  duration_seconds: number | null
+  author_id: string | null
+  author_name: string | null
+  created_at: Date
+  updated_at: Date
+  antecedent_enc: string | null
+  behavior_enc: string | null
+  consequence_enc: string | null
+  material_response_enc: string | null
+  operator_notes_enc: string | null
+  interpretation_enc: string | null
+}
+
+const OBSERVATION_COLUMNS = `o.id, o.child_id, o.goal_id, o.material_id, o.observed_at, o.context, o.prompt_level, o.frequency,
+  o.duration_seconds, o.author_id, coalesce(nullif(m.display_name, ''), m.email) as author_name, o.created_at, o.updated_at,
+  o.antecedent_enc, o.behavior_enc, o.consequence_enc, o.material_response_enc, o.operator_notes_enc, o.interpretation_enc`
+
+function observationOut(row: ObservationRow, s: Sealer) {
+  const out: Record<string, unknown> = {
+    id: row.id,
+    childId: row.child_id,
+    goalId: row.goal_id,
+    materialId: row.material_id,
+    observedAt: row.observed_at,
+    context: row.context,
+    promptLevel: row.prompt_level,
+    frequency: row.frequency,
+    durationSeconds: row.duration_seconds,
+    authorId: row.author_id,
+    authorName: row.author_name,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+  for (const [col, key] of OBSERVATION_TEXTS) out[key] = s.open(row[col], 'observations', col, row.id)
+  return out
+}
+
+async function observationById(tx: Tx, id: string, s: Sealer) {
+  const [row] = await tx<ObservationRow[]>`
+    select ${tx.unsafe(OBSERVATION_COLUMNS)}
+    from app.observations o left join app.memberships m on m.org_id = o.org_id and m.user_id = o.author_id
+    where o.id = ${id}`
+  return observationOut(row, s)
+}
+
+async function listObservations(userId: string, childId: string) {
+  return asUser(userId, async (tx) => {
+    const { orgId, s } = await context(tx, userId)
+    const [child] = await tx`select id from app.children where id = ${childId} and org_id = ${orgId}`
+    if (!child) throw notFound()
+    const rows = await tx<ObservationRow[]>`
+      select ${tx.unsafe(OBSERVATION_COLUMNS)}
+      from app.observations o left join app.memberships m on m.org_id = o.org_id and m.user_id = o.author_id
+      where o.child_id = ${childId} and o.org_id = ${orgId}
+      order by o.observed_at desc, o.created_at desc`
+    await audit(tx, { orgId, action: 'legge', entity: 'observations', childId })
+    return { observations: rows.map((r) => observationOut(r, s)) }
+  })
+}
+
+/** Intero facoltativo ≥ 0: undefined se assente, null se vuoto */
+function optCount(body: Body, key: string, max: number): number | null | undefined {
+  if (!(key in body)) return undefined
+  const value = body[key]
+  if (value === null || value === '') return null
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > max) throw new UserError('Numero non valido.')
+  return value
+}
+
+/** Data e ora dell'osservazione (ISO), al massimo un giorno nel futuro */
+function optInstant(body: Body, key: string): Date | undefined {
+  if (!(key in body)) return undefined
+  const value = body[key]
+  const time = typeof value === 'string' ? Date.parse(value) : NaN
+  if (Number.isNaN(time) || time > Date.now() + 86_400_000 || time < Date.parse('2000-01-01')) throw new UserError('Data non valida.')
+  return new Date(time)
+}
+
+async function saveObservation(userId: string, body: Body, create: boolean) {
+  const texts = {
+    antecedent: optText(body, 'antecedent', 2000, 'Antecedente'),
+    behavior: optText(body, 'behavior', 2000, 'Comportamento'),
+    consequence: optText(body, 'consequence', 2000, 'Conseguenza'),
+    materialResponse: optText(body, 'materialResponse', 2000, 'Risposta al materiale'),
+    operatorNotes: optText(body, 'operatorNotes', 4000, 'Note'),
+    interpretation: optText(body, 'interpretation', 4000, 'Interpretazione'),
+  }
+  const values = {
+    goal_id: optUuid(body, 'goalId'),
+    material_id: optUuid(body, 'materialId'),
+    observed_at: optInstant(body, 'observedAt'),
+    context: 'context' in body && body.context === null ? null : optOneOf(body, 'context', OBS_CONTEXTS),
+    prompt_level: 'promptLevel' in body && body.promptLevel === null ? null : optOneOf(body, 'promptLevel', PROMPT_LEVELS),
+    frequency: optCount(body, 'frequency', 10_000),
+    duration_seconds: optCount(body, 'durationSeconds', 86_400),
+  }
+  return asUser(userId, async (tx) => {
+    const { orgId, s } = await context(tx, userId)
+    const id = create ? randomUUID() : uuid(body.id)
+    let childId: string
+    if (create) {
+      childId = uuid(body.childId)
+      const [child] = await tx`select id from app.children where id = ${childId} and org_id = ${orgId} and deleted_at is null`
+      if (!child) throw notFound()
+    } else {
+      const [row] = await tx<{ child_id: string }[]>`select child_id from app.observations where id = ${id} and org_id = ${orgId} for update`
+      if (!row) throw new UserError('Osservazione non trovata.', 404)
+      childId = row.child_id
+    }
+    // Obiettivo e materiale devono essere dello stesso bambino e dello stesso centro
+    if (values.goal_id) {
+      const [goal] = await tx`select id from app.goals where id = ${values.goal_id} and child_id = ${childId} and org_id = ${orgId}`
+      if (!goal) throw new UserError('Obiettivo non trovato.', 404)
+    }
+    if (values.material_id) {
+      const [material] = await tx`select id from app.materials where id = ${values.material_id} and org_id = ${orgId}`
+      if (!material) throw new UserError('Materiale non trovato.', 404)
+    }
+    const sealed = Object.fromEntries(
+      OBSERVATION_TEXTS.map(([col, key]) => {
+        const text = texts[key]
+        return [col, text === undefined ? undefined : (s.seal(text, 'observations', col, id) ?? null)]
+      }),
+    )
+    const fields = defined({ ...values, ...sealed })
+    if (create) {
+      if (!texts.behavior && !values.prompt_level && values.frequency == null && values.duration_seconds == null) {
+        throw new UserError('Scrivi almeno il comportamento osservato, il livello di aiuto, la frequenza o la durata.')
+      }
+      await tx`insert into app.observations ${tx({ id, org_id: orgId, child_id: childId, ...fields } as Record<string, unknown>)}`
+    } else if (Object.keys(fields).length > 0) {
+      await tx`update app.observations set ${tx(fields as Record<string, unknown>)} where id = ${id}`
+    }
+    await audit(tx, {
+      orgId,
+      action: create ? 'crea' : 'modifica',
+      entity: 'observations',
+      entityId: id,
+      childId,
+      ...(create ? {} : { details: { campi: Object.keys(fields) } }),
+    })
+    return { observation: await observationById(tx, id, s) }
   })
 }
 
