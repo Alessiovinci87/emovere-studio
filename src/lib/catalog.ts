@@ -6,7 +6,9 @@ export const catalog = catalogJson as Catalog
 
 /** Blocco delle vignette generate con AI nell'app */
 export const AI_BLOCK = 'X'
-const blockLabels: Record<string, string> = { ...catalog.blocks, [AI_BLOCK]: 'Create con AI' }
+/** Blocco delle foto caricate dal centro */
+export const PHOTO_BLOCK = 'P'
+const blockLabels: Record<string, string> = { ...catalog.blocks, [AI_BLOCK]: 'Create con AI', [PHOTO_BLOCK]: 'Foto del centro' }
 
 // Catalogo completo = catalog.json + vignette AI (caricate da /api/library all'avvio)
 let scenes: Scene[] = catalog.scenes
@@ -21,7 +23,7 @@ function reindex() {
 
 /** Unisce al catalogo le vignette generate con AI (sostituisce quelle caricate in precedenza). */
 export function setAiScenes(aiScenes: Scene[]) {
-  scenes = [...catalog.scenes, ...aiScenes.map((s) => ({ ...s, ai: true }))]
+  scenes = [...catalog.scenes, ...aiScenes.map((s) => (s.photo ? s : { ...s, ai: true }))]
   reindex()
 }
 
@@ -83,7 +85,7 @@ export function filterScenes(f: SceneFilters): Scene[] {
 
 /** Blocchi che hanno almeno una scena, in ordine (le vignette AI in fondo). */
 export function usedBlocks(): string[] {
-  return [...Object.keys(catalog.blocks), AI_BLOCK].filter((b) => scenes.some((s) => s.block === b))
+  return [...Object.keys(catalog.blocks), AI_BLOCK, PHOTO_BLOCK].filter((b) => scenes.some((s) => s.block === b))
 }
 
 export function usedSettings(): string[] {

@@ -58,7 +58,8 @@ export const aiApi = {
   /** Vignette AI salvate, da unire al catalogo. In locale (senza /api) restituisce un elenco vuoto. */
   async scenes(): Promise<Scene[]> {
     try {
-      return (await call<{ scenes: Scene[] }>('/api/library')).scenes
+      const { scenes, photos = [] } = await call<{ scenes: Scene[]; photos?: Scene[] }>('/api/library')
+      return [...scenes, ...photos.map((p) => ({ ...p, photo: true }))]
     } catch {
       return []
     }
@@ -67,4 +68,11 @@ export const aiApi = {
   generate: (request: AiRequest) => call<AiPreview>('/api/generate', post(request)),
   save: (data: AiSave) => call<{ scene: Scene }>('/api/library', post(data)),
   remove: (code: string) => call<{ deleted: string }>(`/api/library?code=${encodeURIComponent(code)}`, { method: 'DELETE' }),
+  /** Foto del centro: immagine WebP quadrata già ridotta nel browser */
+  savePhoto: async (data: { title: string; tags: string[]; image: string }) => {
+    const { scene } = await call<{ scene: Scene }>('/api/library?resource=photo', post(data))
+    return { ...scene, photo: true }
+  },
+  removePhoto: (code: string) =>
+    call<{ deleted: string }>(`/api/library?resource=photo&code=${encodeURIComponent(code)}`, { method: 'DELETE' }),
 }

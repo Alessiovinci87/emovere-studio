@@ -2,9 +2,16 @@
 //   GET            → { scenes }  voci da unire a catalog.json
 //   POST           → salva l'anteprima: assegna il codice X001, X002…, carica le immagini, aggiorna l'indice
 //   DELETE ?code=  → elimina la vignetta (voce e immagini)
+//   Foto del centro (cifrate, visibili solo al centro, vedi _lib/photos.ts):
+//   GET            → anche { photos }
+//   POST ?resource=photo { title, tags, image: data:image/webp;base64,… } → { scene }
+//   DELETE ?resource=photo&code=P001
 import { AI_ADULTS, AI_OUTFITS, AI_SETTINGS } from '../src/config/ai.js'
 import type { Scene } from '../src/types.js'
+import { requireUser } from './_lib/auth.js'
+import { asUser, audit, requireMembership } from './_lib/db.js'
 import { UserError, handle, json } from './_lib/http.js'
+import { deletePhoto, photoScenes, savePhoto } from './_lib/photos.js'
 import { deleteImages, imagePath, putImage, readIndex, writeIndex } from './_lib/storage.js'
 
 const CODE = /^X\d{3,}$/
@@ -20,12 +27,39 @@ interface SaveBody {
   images: { bambina: string; bambino: string }
 }
 
-export function GET(): Promise<Response> {
-  return handle(async () => json({ scenes: (await readIndex()).scenes }))
+export function GET(request: Request): Promise<Response> {
+  return handle(async () => {
+    // Le foto sono del centro: servono utente e centro (senza, solo le vignette AI comuni)
+    const user = await requireUser(request).catch(() => null)
+    const [index, photos] = await Promise.all([
+      readIndex(),
+      user
+        ? asUser(user.id, async (tx) => {
+            const membership = await requireMembership(tx, user.id).catch(() => null)
+            return membership ? photoScenes(tx, membership.orgId) : []
+          })
+        : [],
+    ])
+    return json({ scenes: index.scenes, photos })
+  })
 }
 
 export function POST(request: Request): Promise<Response> {
   return handle(async () => {
+    if (new URL(request.url).searchParams.get('resource') === 'photo') {
+      const user = await requireUser(request)
+      const body = (await request.json().catch(() => null)) as { title?: unknown; tags?: unknown; image?: unknown } | null
+      const title = clean(body?.title, 60)
+      if (!title) throw new UserError('Scrivi il titolo della foto.')
+      const tags = (Array.isArray(body?.tags) ? body.tags : []).map((t) => clean(t, 30).toLowerCase()).filter(Boolean).slice(0, 8)
+      const scene = await asUser(user.id, async (tx) => {
+        const { orgId } = await requireMembership(tx, user.id)
+        const saved = await savePhoto(tx, orgId, { title, tags, dataUrl: typeof body?.image === 'string' ? body.image : '' })
+        await audit(tx, { orgId, action: 'crea', entity: 'foto', details: { codice: saved.code } })
+        return saved
+      })
+      return json({ scene })
+    }
     const body = (await request.json().catch(() => null)) as SaveBody | null
     const title_f = clean(body?.title_f, 60)
     const title_m = clean(body?.title_m, 60)
@@ -69,7 +103,18 @@ export function POST(request: Request): Promise<Response> {
 
 export function DELETE(request: Request): Promise<Response> {
   return handle(async () => {
-    const code = new URL(request.url).searchParams.get('code') ?? ''
+    const params = new URL(request.url).searchParams
+    if (params.get('resource') === 'photo') {
+      const user = await requireUser(request)
+      const code = params.get('code') ?? ''
+      await asUser(user.id, async (tx) => {
+        const { orgId } = await requireMembership(tx, user.id)
+        await deletePhoto(tx, orgId, code)
+        await audit(tx, { orgId, action: 'elimina', entity: 'foto', details: { codice: code } })
+      })
+      return json({ deleted: code })
+    }
+    const code = params.get('code') ?? ''
     if (!CODE.test(code)) throw new UserError('Codice non valido.')
     const index = await readIndex()
     if (!index.scenes.some((s) => s.code === code)) throw new UserError('Vignetta non trovata.', 404)

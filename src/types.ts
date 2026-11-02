@@ -14,7 +14,9 @@ export interface Scene {
   adults: string[]
   /** Vignetta generata con AI nell'app (codice X001, X002…) */
   ai?: boolean
-  /** Solo vignette AI: indirizzi delle immagini (servite da /api/image) */
+  /** Foto caricata dal centro (codice P001…): stessa immagine per bambina e bambino, solo del centro */
+  photo?: boolean
+  /** Vignette AI e foto: indirizzi delle immagini (servite da /api/image) */
   images?: Record<Character, string>
 }
 

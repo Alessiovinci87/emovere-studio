@@ -118,6 +118,33 @@ export async function readImage(pathname: string) {
   return get(pathname, { access: 'private' })
 }
 
+// ——— Foto del centro: foto/{centro}/index.enc e foto/{centro}/P001.enc, cifrate con la chiave del centro ———
+
+/** Testo cifrato salvato così com'è (foto e indice delle foto) */
+export async function putText(pathname: string, text: string, overwrite: boolean): Promise<void> {
+  await put(pathname, text, {
+    access: 'private',
+    addRandomSuffix: false,
+    allowOverwrite: overwrite,
+    contentType: 'text/plain',
+    cacheControlMaxAge: 60,
+  })
+}
+
+export async function readText(pathname: string, useCache = false): Promise<string | null> {
+  const result = await get(pathname, { access: 'private', useCache })
+  if (!result || result.statusCode !== 200) return null
+  return new Response(result.stream).text()
+}
+
+export function photoIndexPath(orgId: string): string {
+  return `foto/${orgId}/index.enc`
+}
+
+export function photoPath(orgId: string, code: string): string {
+  return `foto/${orgId}/${code}.enc`
+}
+
 export async function deleteImages(pathnames: string[]): Promise<void> {
   await del(pathnames)
 }

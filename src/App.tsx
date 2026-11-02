@@ -17,7 +17,7 @@ import { Modal } from './components/Modal'
 import { FolderPicker, SymbolPicker } from './components/Pickers'
 import { Button } from './components/ui'
 import { aiApi } from './lib/ai'
-import { setAiScenes } from './lib/catalog'
+import { getScene, setAiScenes } from './lib/catalog'
 import { downloadBlob } from './lib/download'
 import { fetchColoringKeys, requestColoring } from './lib/coloring'
 import { coloringKey } from './lib/look'
@@ -33,6 +33,7 @@ import { CreateView, type CreateChoice } from './views/CreateView'
 import { SettingsView } from './views/SettingsView'
 import { GuideScreen } from './views/GuideEditor'
 import { ChildModeView } from './views/ChildModeView'
+import { PhotoUploadDialog } from './components/PhotoUploadDialog'
 import { TodayView } from './views/TodayView'
 import { TrashView } from './views/TrashView'
 import { ChildView } from './views/ChildView'
@@ -111,6 +112,7 @@ function Workspace({ session, server, data }: { session: Session; server: Return
   /** Vignette generate con AI (unite al catalogo) */
   const [aiScenes, setAiList] = useState<Scene[]>([])
   const [aiOpen, setAiOpen] = useState(false)
+  const [photoOpen, setPhotoOpen] = useState(false)
   const [auditOpen, setAuditOpen] = useState(false)
 
   /** Aggiorna il catalogo con le vignette AI e ridisegna */
@@ -309,13 +311,13 @@ function Workspace({ session, server, data }: { session: Session; server: Return
     const warning = used > 0 ? `
 
 È usata in ${used} ${used === 1 ? 'scheda' : 'schede'}: lì il riquadro resterà vuoto.` : ''
-    if (!confirm(`Eliminare la vignetta “${scene.title_f}” (${scene.code})?${warning}
+    if (!confirm(`Eliminare ${scene.photo ? 'la foto' : 'la vignetta'} “${scene.title_f}” (${scene.code})?${warning}
 
 Non si può annullare.`)) return
     try {
-      await aiApi.remove(scene.code)
+      await (scene.photo ? aiApi.removePhoto(scene.code) : aiApi.remove(scene.code))
       applyAiScenes(aiScenes.filter((s) => s.code !== scene.code))
-      setToast(`Vignetta ${scene.code} eliminata`)
+      setToast(`${scene.photo ? 'Foto' : 'Vignetta'} ${scene.code} eliminata`)
     } catch (err) {
       alert((err as Error).message)
     }
@@ -328,7 +330,8 @@ Non si può annullare.`)) return
         .map((i) => target.cells[i].code)
         .filter((c): c is string => !!c),
     )
-    return [...codes].filter((code) => !coloringKeys.has(coloringKey(code, target.character)))
+    // Le foto del centro non hanno versione da colorare: restano come sono
+    return [...codes].filter((code) => !getScene(code)?.photo && !coloringKeys.has(coloringKey(code, target.character)))
   }
 
   /** Genera le versioni da colorare mancanti (due alla volta), con avanzamento; si ferma al primo errore. */
@@ -495,10 +498,13 @@ Non si può annullare.`)) return
               subtitle={lastOpened ? `Tocca una vignetta per aggiungerla a “${lastOpened.title || 'Scheda'}”.` : 'Apri una scheda: toccando una vignetta la aggiungi lì.'}
               onBack={backTo({ name: 'oggi' })}
               actions={
-                <Button tone="primary" onClick={() => setAiOpen(true)} className="flex items-center gap-2">
-                  <SparkleIcon className="h-5 w-5" />
-                  Crea nuova vignetta con AI
-                </Button>
+                <>
+                  <Button onClick={() => setPhotoOpen(true)}>+ Foto del centro</Button>
+                  <Button tone="primary" onClick={() => setAiOpen(true)} className="flex items-center gap-2">
+                    <SparkleIcon className="h-5 w-5" />
+                    Crea nuova vignetta con AI
+                  </Button>
+                </>
               }
             />
             <Library
@@ -717,6 +723,17 @@ Non si può annullare.`)) return
       )}
 
       {auditOpen && <AuditLogDialog folders={data.folders} onClose={() => setAuditOpen(false)} />}
+
+      {photoOpen && (
+        <PhotoUploadDialog
+          onSaved={(scene) => {
+            applyAiScenes([...aiScenes, scene])
+            setPhotoOpen(false)
+            setToast(`Foto ${scene.code} salvata in libreria`)
+          }}
+          onClose={() => setPhotoOpen(false)}
+        />
+      )}
 
       {aiOpen && (
         <AiCreateDialog

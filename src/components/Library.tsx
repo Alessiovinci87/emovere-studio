@@ -132,9 +132,9 @@ export function Library({
                     loading="lazy"
                     className="aspect-square w-full bg-sand object-cover"
                   />
-                  {scene.ai && (
+                  {(scene.ai || scene.photo) && (
                     <span className="absolute left-3 top-3 rounded-full bg-white/95 px-2.5 py-0.5 text-xs font-bold text-accent shadow-sm">
-                      AI
+                      {scene.photo ? 'Foto' : 'AI'}
                     </span>
                   )}
                 </span>
@@ -158,7 +158,7 @@ export function Library({
                   )}
                 </div>
               )}
-              {scene.ai && onDeleteAi && (
+              {(scene.ai || scene.photo) && onDeleteAi && (
                 <button
                   onClick={() => onDeleteAi(scene)}
                   aria-label={`Elimina la vignetta ${scene.code}`}

@@ -23,6 +23,8 @@ const ENTITIES: Record<string, string> = {
   goals: 'obiettivo',
   materials: 'materiale',
   observations: 'osservazione',
+  foto: 'foto della libreria',
+  material_shares: 'link condiviso',
   organizations: 'impostazioni del centro',
   memberships: 'membro del centro',
 }
