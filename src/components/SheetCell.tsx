@@ -3,7 +3,7 @@ import { CSS } from '@dnd-kit/utilities'
 import type { CSSProperties, HTMLAttributes, ReactNode, Ref } from 'react'
 import { getScene, sceneTitle } from '../lib/catalog'
 import { lookImage } from '../lib/look'
-import { stepColors, type Template } from '../lib/sheet'
+import { SCALE_COLORS, stepColors, type Template } from '../lib/sheet'
 import type { Cell, CellSymbol, Character } from '../types'
 import { INK, TimeClock, showDigitalLabel, timeClass, useLook } from './SheetParts'
 import { DoneCircle } from './Stars'
@@ -60,17 +60,23 @@ export function SortableSheetCell({ selected, onSelect, onChoose, onSymbol, onCl
     <CellFrame
       {...props}
       frameRef={setNodeRef}
-      frameStyle={{ transform: CSS.Translate.toString(transform), transition, zIndex: isDragging ? 10 : undefined }}
-      frameProps={{
-        ...attributes,
-        ...listeners,
-        'aria-label': `Riquadro ${index + 1}`,
-        'data-cell-id': cell.id,
-        onClick: (e) => {
-          // I tocchi su campi e pulsanti fanno il loro lavoro; il resto del riquadro lo seleziona
-          if (onSelect && filled && !(e.target as HTMLElement).closest('input, textarea, button')) onSelect()
-        },
-      } as HTMLAttributes<HTMLDivElement>}
+      frameStyle={{
+        transform: CSS.Translate.toString(transform),
+        transition,
+        zIndex: isDragging ? 10 : undefined,
+      }}
+      frameProps={
+        {
+          ...attributes,
+          ...listeners,
+          'aria-label': `Riquadro ${index + 1}`,
+          'data-cell-id': cell.id,
+          onClick: (e) => {
+            // I tocchi su campi e pulsanti fanno il loro lavoro; il resto del riquadro lo seleziona
+            if (onSelect && filled && !(e.target as HTMLElement).closest('input, textarea, button')) onSelect()
+          },
+        } as HTMLAttributes<HTMLDivElement>
+      }
       className={`cursor-grab active:cursor-grabbing ${isDragging ? 'opacity-90 shadow-xl' : ''} ${
         selected ? 'outline-[1mm] outline-offset-[0.5mm] outline-sky outline-solid' : ''
       }`}
@@ -124,7 +130,7 @@ export function SortableSheetCell({ selected, onSelect, onChoose, onSymbol, onCl
           <textarea
             value={value}
             onChange={(e) => setText(e.target.value)}
-            rows={compact ? 1 : 2}
+            rows={compact ? 1 : (template.captionLines ?? 2)}
             placeholder={compact ? (filled ? 'frase' : '') : filled ? '' : 'Frase'}
             aria-label={`Frase riquadro ${index + 1}`}
             className={compact ? compactTextClass : textClass}
@@ -171,7 +177,16 @@ export function PrintSheetCell(props: Props) {
             {text}
           </p>
         ) : (
-          <p className={`${textClass} line-clamp-2 h-[calc(2lh+3px)]`} style={{ fontSize: `${template.textMm}mm` }}>
+          <p
+            className={`${textClass} overflow-hidden`}
+            style={{
+              fontSize: `${template.textMm}mm`,
+              display: '-webkit-box',
+              WebkitBoxOrient: 'vertical',
+              WebkitLineClamp: template.captionLines ?? 2,
+              height: `calc(${template.captionLines ?? 2}lh + 3px)`,
+            }}
+          >
             {text}
           </p>
         )
@@ -259,7 +274,7 @@ function CellFrame({
   const look = useLook()
   const mono = look.coloring
   const scene = cell.code ? getScene(cell.code) : undefined
-  const color = stepColors[index % stepColors.length]
+  const color = template.layout === 'scale' ? SCALE_COLORS[index % SCALE_COLORS.length] : stepColors[index % stepColors.length]
   const label = template.cellLabels?.[index]
   const compact = template.layout === 'agenda'
   const highlighted = template.highlight === index
@@ -295,23 +310,30 @@ function CellFrame({
     empty
   )
 
-  if (template.layout === 'checklist') {
-    // Riga: numero, vignetta piccola, frase, casella da spuntare
+  if (template.layout === 'checklist' || template.layout === 'scale') {
+    // Riga: numero, vignetta piccola, frase, casella da spuntare (termometro: senza numero né casella)
+    const checklist = template.layout === 'checklist'
     return (
       <div
         ref={frameRef}
-        style={{ ...frameStyle, borderColor: mono ? INK : `${color}66`, borderWidth }}
+        style={{
+          ...frameStyle,
+          borderColor: mono ? INK : `${color}66`,
+          borderWidth,
+        }}
         className={`group relative flex min-h-0 items-center gap-[3mm] rounded-[4mm] bg-white px-[3mm] py-[1.5mm] [container-type:size] ${className}`}
         {...frameProps}
       >
         {showNumber && number}
         {showImage && <div className="relative h-full w-[100cqh] shrink-0 [container-type:size]">{picture}</div>}
         <div className="min-w-0 flex-1">{(showText || !showImage) && text('row')}</div>
-        <span
-          aria-hidden="true"
-          className="h-[min(12mm,70cqh)] w-[min(12mm,70cqh)] shrink-0 rounded-[2mm] border-[0.7mm] bg-white"
-          style={{ borderColor: mono ? INK : color }}
-        />
+        {checklist && (
+          <span
+            aria-hidden="true"
+            className="h-[min(12mm,70cqh)] w-[min(12mm,70cqh)] shrink-0 rounded-[2mm] border-[0.7mm] bg-white"
+            style={{ borderColor: mono ? INK : color }}
+          />
+        )}
       </div>
     )
   }
@@ -319,14 +341,20 @@ function CellFrame({
   return (
     <div
       ref={frameRef}
-      style={{ ...frameStyle, borderColor: mono ? INK : highlighted ? color : `${color}66`, borderWidth }}
+      style={{
+        ...frameStyle,
+        borderColor: mono ? INK : highlighted ? color : `${color}66`,
+        borderWidth,
+      }}
       className={`group relative flex min-h-0 flex-col bg-white ${compact ? 'rounded-[2.5mm] p-[1mm]' : 'rounded-[4mm] p-[2mm]'} ${className}`}
       {...frameProps}
     >
       {label && (
         <span
           className="mb-[1.5mm] self-start rounded-full border-[0.5mm] px-[5mm] py-[1mm] text-[7mm] font-bold uppercase leading-tight"
-          style={mono ? { borderColor: INK, color: INK, background: 'white' } : { borderColor: color, backgroundColor: color, color: 'white' }}
+          style={
+            mono ? { borderColor: INK, color: INK, background: 'white' } : { borderColor: color, backgroundColor: color, color: 'white' }
+          }
         >
           {label}
         </span>
@@ -386,9 +414,7 @@ export function SceneSquare({
         draggable={false}
         className={`h-full w-full rounded-[7%] object-cover ${look.coloring ? 'border-[0.3mm] border-[#222]' : ''}`}
       />
-      {symbol && corner && (
-        <SymbolIcon kind={symbol.kind} mono={look.coloring} className={`absolute w-[30%] ${cornerClass[corner]}`} />
-      )}
+      {symbol && corner && <SymbolIcon kind={symbol.kind} mono={look.coloring} className={`absolute w-[30%] ${cornerClass[corner]}`} />}
       {doneCircle && <DoneCircle mono={look.coloring} />}
     </div>
   )
@@ -458,17 +484,7 @@ export function EmptyPick({ onClick, label = 'Scegli vignetta' }: { onClick: () 
   )
 }
 
-function CellButton({
-  big,
-  small,
-  onClick,
-  children,
-}: {
-  big?: boolean
-  small?: boolean
-  onClick: () => void
-  children: ReactNode
-}) {
+function CellButton({ big, small, onClick, children }: { big?: boolean; small?: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button
       onClick={onClick}

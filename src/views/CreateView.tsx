@@ -52,8 +52,8 @@ export function CreateView({ folders, folderId, onBack, onCreate, onCreatePreset
         <span className="flex flex-col gap-1">
           <span className="text-lg font-bold">Nuovo materiale guidato</span>
           <span className="text-sm leading-snug text-muted">
-            Dall’obiettivo e dalla situazione, con i dati del profilo che scegli tu: l’AI propone una sequenza o una guida per
-            genitori e scuola, da rivedere.
+            Dall’obiettivo e dalla situazione, con i dati del profilo che scegli tu: l’AI propone una sequenza o una guida per genitori e
+            scuola, da rivedere.
           </span>
         </span>
       </button>
@@ -86,27 +86,34 @@ export function CreateView({ folders, folderId, onBack, onCreate, onCreatePreset
 
       <section className="flex flex-col gap-4">
         <h2 className="text-lg font-bold">Modelli vuoti</h2>
-        <ul className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-          {templateList.map((t) => (
-            <li key={t.id}>
-              <button
-                onClick={() => setChosen({ kind: 'template', template: t })}
-                className="flex h-full w-full items-center gap-5 rounded-3xl bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-              >
-                <TemplatePreview template={t} />
-                <span className="flex flex-col gap-1.5">
-                  <span className="text-lg font-bold">{t.label}</span>
-                  <span className="text-sm leading-snug text-muted">{t.description}</span>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        {[...new Set(templateList.map((t) => t.group))].map((group) => (
+          <div key={group} className="flex flex-col gap-3">
+            <h3 className="text-sm font-bold uppercase tracking-wide text-muted">{group}</h3>
+            <ul className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+              {templateList
+                .filter((t) => t.group === group)
+                .map((t) => (
+                  <li key={t.id}>
+                    <button
+                      onClick={() => setChosen({ kind: 'template', template: t })}
+                      className="flex h-full w-full items-center gap-5 rounded-3xl bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                    >
+                      <TemplatePreview template={t} />
+                      <span className="flex flex-col gap-1.5">
+                        <span className="text-lg font-bold">{t.label}</span>
+                        <span className="text-sm leading-snug text-muted">{t.description}</span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+            </ul>
+          </div>
+        ))}
       </section>
       <p className="mt-8 text-sm text-muted">
-        Su ogni modello puoi scegliere immagini e testo, solo immagini o solo testo, togliere i numeri, aggiungere il
-        cerchietto per la stellina “fatto”, lo stampatello maiuscolo, la versione da colorare e le carte da ritagliare. Le
-        sequenze si esportano anche in versione da riordinare.
+        Su ogni modello puoi scegliere immagini e testo, solo immagini o solo testo, togliere i numeri, aggiungere il cerchietto per la
+        stellina “fatto”, lo stampatello maiuscolo, la versione da colorare e le carte da ritagliare. Le sequenze si esportano anche in
+        versione da riordinare.
       </p>
 
       {chosen?.kind === 'template' && (
@@ -159,11 +166,23 @@ function TemplatePreview({ template, codes }: { template: Template; codes?: stri
   if (template.layout === 'checklist') {
     // Righe: vignetta piccola, frase, casella
     return (
-      <span className="flex h-[124px] w-[88px] shrink-0 flex-col gap-1 rounded-lg border border-line bg-white p-1.5 shadow-sm" aria-hidden="true">
+      <span
+        className="flex h-[124px] w-[88px] shrink-0 flex-col gap-1 rounded-lg border border-line bg-white p-1.5 shadow-sm"
+        aria-hidden="true"
+      >
         <span className="mx-auto h-1.5 w-10 shrink-0 rounded-full bg-line" />
         {Array.from({ length: 6 }, (_, i) => (
-          <span key={i} className="flex min-h-0 flex-1 items-center gap-1 rounded-[3px] border px-0.5" style={{ borderColor: `${stepColors[i % stepColors.length]}88` }}>
-            <img src={sceneThumb(samples[i % samples.length], 'bambina')} alt="" loading="lazy" className="aspect-square h-[80%] rounded-[2px] object-cover" />
+          <span
+            key={i}
+            className="flex min-h-0 flex-1 items-center gap-1 rounded-[3px] border px-0.5"
+            style={{ borderColor: `${stepColors[i % stepColors.length]}88` }}
+          >
+            <img
+              src={sceneThumb(samples[i % samples.length], 'bambina')}
+              alt=""
+              loading="lazy"
+              className="aspect-square h-[80%] rounded-[2px] object-cover"
+            />
             <span className="h-1 flex-1 rounded-full bg-line" />
             <span className="aspect-square h-[55%] rounded-[2px] border" style={{ borderColor: stepColors[i % stepColors.length] }} />
           </span>
@@ -182,7 +201,13 @@ function TemplatePreview({ template, codes }: { template: Template; codes?: stri
       {agenda && (
         <span className="grid shrink-0 grid-cols-7 gap-[2px]">
           {WEEK_DAYS.map((d, i) => (
-            <span key={d} className="h-1.5 rounded-[2px]" style={{ backgroundColor: `${stepColors[i % stepColors.length]}66` }} />
+            <span
+              key={d}
+              className="h-1.5 rounded-[2px]"
+              style={{
+                backgroundColor: `${stepColors[i % stepColors.length]}66`,
+              }}
+            />
           ))}
         </span>
       )}
@@ -201,11 +226,17 @@ function TemplatePreview({ template, codes }: { template: Template; codes?: stri
             <span
               key={i}
               className="relative overflow-hidden rounded-[3px] border bg-white"
-              style={{ borderColor: `${stepColors[i % stepColors.length]}${highlighted ? '' : '88'}`, borderWidth: highlighted ? 2 : 1 }}
+              style={{
+                borderColor: `${stepColors[i % stepColors.length]}${highlighted ? '' : '88'}`,
+                borderWidth: highlighted ? 2 : 1,
+              }}
             >
               {code && <img src={sceneThumb(code, 'bambina')} alt="" loading="lazy" className="h-full w-full object-cover" />}
               {template.numbered && (
-                <span className="absolute left-0.5 top-0.5 h-1.5 w-1.5 rounded-full" style={{ backgroundColor: stepColors[i % stepColors.length] }} />
+                <span
+                  className="absolute left-0.5 top-0.5 h-1.5 w-1.5 rounded-full"
+                  style={{ backgroundColor: stepColors[i % stepColors.length] }}
+                />
               )}
             </span>
           )

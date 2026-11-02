@@ -1,4 +1,17 @@
-import type { AgendaOptions, Cell, ChecklistOptions, ReminderKind, SequenceOptions, Sheet, SheetStatus, TemplateId } from '../types'
+import type {
+  AgendaOptions,
+  Cell,
+  CellShow,
+  ChecklistOptions,
+  ReminderKind,
+  ScaleOptions,
+  SequenceOptions,
+  Sheet,
+  SheetStatus,
+  StoryOptions,
+  TemplateId,
+  TokenOptions,
+} from '../types'
 
 export interface Template {
   id: TemplateId
@@ -11,8 +24,12 @@ export interface Template {
    * - sequence: affiancati con freccia → (Prima – Adesso – Dopo)
    * - agenda: giorni in colonna, momenti della giornata in riga
    * - checklist: righe con vignetta piccola, frase e casella da spuntare
+   * - story: storia sociale, vignetta e frase lunga (fino a 4 righe)
+   * - tokens: tabella a gettoni (lavoro → guadagno, fila di gettoni da attaccare)
+   * - wait: carta "Aspetto" con il conto alla rovescia e cosa viene dopo
+   * - scale: termometro delle emozioni, 5 livelli colorati dal più alto al più basso
    */
-  layout: 'grid' | 'stack' | 'sequence' | 'agenda' | 'checklist'
+  layout: 'grid' | 'stack' | 'sequence' | 'agenda' | 'checklist' | 'story' | 'tokens' | 'wait' | 'scale'
   /** false = la frase sotto la vignetta parte vuota (es. Agenda); true = titolo della scena */
   defaultText: boolean
   /** Riquadro evidenziato con un bordo più spesso (ADESSO) */
@@ -32,6 +49,14 @@ export interface Template {
   /** Corpo della frase sotto la vignetta, in mm */
   textMm: number
   defaultTitle: string
+  /** Righe della frase sotto la vignetta (predefinito 2) */
+  captionLines?: number
+  /** Frasi iniziali dei riquadri (es. carte di comunicazione) */
+  defaultTexts?: string[]
+  /** Cosa mostra la scheda appena creata (predefinito: immagini e testo) */
+  defaultShow?: CellShow
+  /** Non compare nella scelta del modello (es. la pagina singola della storia sociale) */
+  hidden?: boolean
 }
 
 export const templates: Record<TemplateId, Template> = {
@@ -215,16 +240,171 @@ export const templates: Record<TemplateId, Template> = {
     textMm: 3.4,
     defaultTitle: 'La mia settimana',
   },
+  'storia-4': {
+    id: 'storia-4',
+    orientation: 'portrait',
+    layout: 'story',
+    defaultText: false,
+    description: 'Storia sociale in 4 scene: vignetta e frase in prima persona.',
+    label: 'Storia sociale · 4 scene',
+    group: 'Storie sociali',
+    cols: 2,
+    rows: 2,
+    numbered: false,
+    textMm: 5.2,
+    captionLines: 4,
+    defaultTitle: 'La mia storia',
+  },
+  'storia-6': {
+    id: 'storia-6',
+    orientation: 'portrait',
+    layout: 'story',
+    defaultText: false,
+    description: 'Storia sociale in 6 scene, anche una scena per pagina nel PDF.',
+    label: 'Storia sociale · 6 scene',
+    group: 'Storie sociali',
+    cols: 2,
+    rows: 3,
+    numbered: false,
+    textMm: 4.6,
+    captionLines: 3,
+    defaultTitle: 'La mia storia',
+  },
+  'storia-1': {
+    id: 'storia-1',
+    orientation: 'portrait',
+    layout: 'story',
+    defaultText: false,
+    description: 'Una scena per pagina.',
+    label: 'Storia sociale · una scena',
+    group: 'Storie sociali',
+    cols: 1,
+    rows: 1,
+    numbered: false,
+    textMm: 9,
+    captionLines: 4,
+    defaultTitle: 'La mia storia',
+    hidden: true,
+  },
+  gettoni: {
+    id: 'gettoni',
+    orientation: 'landscape',
+    layout: 'tokens',
+    defaultText: true,
+    description: 'Tabella a gettoni: cosa faccio, cosa guadagno e i gettoni da attaccare col velcro.',
+    label: 'Tabella a gettoni',
+    group: 'Comportamento',
+    cols: 2,
+    rows: 1,
+    numbered: false,
+    cellLabels: ['Lavoro', 'Guadagno'],
+    textMm: 6,
+    defaultTitle: 'Lavoro per…',
+  },
+  aspetta: {
+    id: 'aspetta',
+    orientation: 'portrait',
+    layout: 'wait',
+    defaultText: true,
+    description: 'Carta “Aspetto”: conto alla rovescia da 5 a 1 e cosa viene dopo.',
+    label: 'Aspetto',
+    group: 'Comportamento',
+    cols: 1,
+    rows: 1,
+    numbered: false,
+    cellLabels: ['Poi'],
+    textMm: 8,
+    defaultTitle: 'Aspetto',
+  },
+  termometro: {
+    id: 'termometro',
+    orientation: 'portrait',
+    layout: 'scale',
+    defaultText: false,
+    description: 'Termometro delle emozioni: 5 livelli con cosa sento e cosa posso fare.',
+    label: 'Termometro delle emozioni',
+    group: 'Comportamento',
+    cols: 1,
+    rows: 5,
+    numbered: false,
+    textMm: 5.5,
+    defaultTitle: 'Il mio termometro',
+    defaultTexts: [
+      'Chiedo aiuto a un adulto',
+      'Vado nell’angolo calmo',
+      'Faccio 5 respiri lenti',
+      'Bevo un bicchiere d’acqua',
+      'Continuo a giocare',
+    ],
+  },
+  'comunicazione-6': {
+    id: 'comunicazione-6',
+    orientation: 'portrait',
+    layout: 'grid',
+    defaultText: true,
+    description: 'Sei carte con frasi pronte: aiuto, pausa, ho finito…',
+    label: 'Comunicazione · 6 carte',
+    group: 'Comunicazione',
+    cols: 2,
+    rows: 3,
+    numbered: false,
+    textMm: 7,
+    defaultTitle: 'Le mie parole',
+    defaultTexts: ['Aiuto', 'Pausa', 'Ho finito', 'Ancora', 'No, grazie', 'Bagno'],
+    defaultShow: 'text',
+  },
+  'comunicazione-8': {
+    id: 'comunicazione-8',
+    orientation: 'portrait',
+    layout: 'grid',
+    defaultText: true,
+    description: 'Otto carte con frasi pronte da usare a casa e a scuola.',
+    label: 'Comunicazione · 8 carte',
+    group: 'Comunicazione',
+    cols: 2,
+    rows: 4,
+    numbered: false,
+    textMm: 6,
+    defaultTitle: 'Le mie parole',
+    defaultTexts: ['Aiuto', 'Pausa', 'Ho finito', 'Ancora', 'No, grazie', 'Bagno', 'Acqua', 'Aspetto'],
+    defaultShow: 'text',
+  },
 }
 
 /** Versione da riordinare: per le sequenze (modelli numerati, Prima/Poi, Ora – Poi, Prima – Adesso – Dopo) */
 export function canReorder(template: Template): boolean {
-  return template.numbered || template.layout === 'stack' || template.layout === 'sequence'
+  return template.numbered || template.layout === 'stack' || template.layout === 'sequence' || template.layout === 'story'
 }
 
-/** Cerchietto della stellina: non nella checklist (c'è la casella) né in "Solo testo" (manca la vignetta) */
+const DONE_CIRCLE_LAYOUTS = new Set<Template['layout']>(['grid', 'stack', 'sequence', 'agenda', 'story'])
+
+/** Cerchietto della stellina: non nella checklist (c'è la casella), nei modelli di comportamento, né in "Solo testo" */
 export function usesDoneCircle(sheet: Sheet): boolean {
-  return sheet.doneCircle && templates[sheet.template].layout !== 'checklist' && sheet.sequence.show !== 'text'
+  return sheet.doneCircle && DONE_CIRCLE_LAYOUTS.has(templates[sheet.template].layout) && sheet.sequence.show !== 'text'
+}
+
+/** Stelline da ritagliare: con il cerchietto, o nella tabella a gettoni (i gettoni sono le stelline) */
+export function usesCutouts(sheet: Sheet): boolean {
+  return sheet.cutouts && (usesDoneCircle(sheet) || templates[sheet.template].layout === 'tokens')
+}
+
+export const TOKENS = { min: 3, max: 10, default: 5 }
+
+export function defaultTokens(): TokenOptions {
+  return { count: TOKENS.default }
+}
+
+export function defaultScale(): ScaleOptions {
+  return {
+    labels: ['Esplodo', 'Sono molto arrabbiato', 'Sono agitato', 'Sono un po’ nervoso', 'Sto bene'],
+  }
+}
+
+/** Colori dei livelli del termometro, dal 5 (rosso) all'1 (verde): sono contenuto, non accento */
+export const SCALE_COLORS = ['#e06a5b', '#ee9a4d', '#f2c94c', '#9ccb6b', '#5fb27a']
+
+export function defaultStory(): StoryOptions {
+  return { perPage: false }
 }
 
 export const CHECKLIST_ROWS = { min: 3, max: 10, default: 6 }
@@ -240,7 +420,11 @@ export function defaultChecklist(): ChecklistOptions {
 export const WEEK_DAYS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 
 export function defaultAgenda(): AgendaOptions {
-  return { days: 7, rows: 3, labels: ['Mattina', 'Pomeriggio', 'Sera', 'Notte'] }
+  return {
+    days: 7,
+    rows: 3,
+    labels: ['Mattina', 'Pomeriggio', 'Sera', 'Notte'],
+  }
 }
 
 /** Agenda: indice del riquadro per momento (riga) e giorno (colonna). */
@@ -248,16 +432,31 @@ export function agendaIndex(row: number, day: number): number {
   return row * 7 + day
 }
 
-export const templateList = Object.values(templates)
+export const templateList = Object.values(templates).filter((t) => !t.hidden)
 
 /** Colori dei numeri dei passaggi: si ripetono in ordine. */
 export const stepColors = ['#e8846b', '#f0b54a', '#7cb87e', '#5fa8d3', '#a58bd6', '#e98bb0']
 
-export const statuses: { id: SheetStatus; label: string; color: string; soft: string }[] = [
+export const statuses: {
+  id: SheetStatus
+  label: string
+  color: string
+  soft: string
+}[] = [
   { id: 'da-fare', label: 'Da fare', color: '#a39aab', soft: '#efebf2' },
-  { id: 'in-lavorazione', label: 'In lavorazione', color: '#d9a23a', soft: '#fdf1d6' },
+  {
+    id: 'in-lavorazione',
+    label: 'In lavorazione',
+    color: '#d9a23a',
+    soft: '#fdf1d6',
+  },
   { id: 'pronta', label: 'Pronta', color: '#6aa86c', soft: '#e3f2e3' },
-  { id: 'consegnata', label: 'Stampata/Consegnata', color: '#5f93cc', soft: '#e3eefa' },
+  {
+    id: 'consegnata',
+    label: 'Stampata/Consegnata',
+    color: '#5f93cc',
+    soft: '#e3eefa',
+  },
 ]
 
 export function statusInfo(id: SheetStatus) {
@@ -293,7 +492,10 @@ export function createSheet(template: TemplateId = 'routine-12', childName = '')
     subtitle: '',
     character: 'bambina',
     childName,
-    cells: Array.from({ length: t.cols * t.rows }, emptyCell),
+    cells: Array.from({ length: t.cols * t.rows }, (_, i) => ({
+      ...emptyCell(),
+      text: t.defaultTexts?.[i] ?? null,
+    })),
     remember: { enabled: false, lines: ['', '', ''] },
     doneCircle: false,
     cutouts: false,
@@ -301,9 +503,12 @@ export function createSheet(template: TemplateId = 'routine-12', childName = '')
     timeMode: 'both',
     showLogo: null,
     coloring: false,
-    sequence: defaultSequence(),
+    sequence: { ...defaultSequence(), show: t.defaultShow ?? 'both' },
     checklist: defaultChecklist(),
     agenda: defaultAgenda(),
+    tokens: defaultTokens(),
+    scale: defaultScale(),
+    story: defaultStory(),
     folderId: null,
     status: 'da-fare',
     notes: '',
@@ -318,10 +523,16 @@ export function normalizeSheet(raw: Partial<Sheet>): Sheet {
   const known = !!raw.template && raw.template in templates
   const base = createSheet(known ? raw.template : 'routine-12')
   const sheet = { ...base, ...raw, template: base.template } as Sheet
-  sheet.cells = (raw.cells ?? base.cells).map((c) => ({ ...emptyCell(), ...c }))
+  sheet.cells = (raw.cells ?? base.cells).map((c) => ({
+    ...emptyCell(),
+    ...c,
+  }))
   sheet.agenda = { ...defaultAgenda(), ...raw.agenda }
   sheet.sequence = { ...defaultSequence(), ...raw.sequence }
   sheet.checklist = { ...defaultChecklist(), ...raw.checklist }
+  sheet.tokens = { ...defaultTokens(), ...raw.tokens }
+  sheet.scale = { ...defaultScale(), ...raw.scale }
+  sheet.story = { ...defaultStory(), ...raw.story }
   // Modello non più disponibile (es. la vecchia "Tabella a gettoni"): diventa Routine 12, vignette comprese
   if (!known) Object.assign(sheet, changeTemplate({ ...sheet, title: '' }, base.template), { title: sheet.title })
   return sheet

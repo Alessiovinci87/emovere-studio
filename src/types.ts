@@ -37,6 +37,14 @@ export type TemplateId =
   | 'ora-poi'
   | 'checklist'
   | 'agenda'
+  | 'storia-4'
+  | 'storia-6'
+  | 'storia-1'
+  | 'gettoni'
+  | 'aspetta'
+  | 'termometro'
+  | 'comunicazione-6'
+  | 'comunicazione-8'
 
 export type SymbolKind = 'check' | 'cross' | 'forbidden'
 export type Corner = 'tl' | 'tr' | 'bl' | 'br'
@@ -81,6 +89,21 @@ export interface AgendaOptions {
   labels: [string, string, string, string]
 }
 
+export interface TokenOptions {
+  /** Gettoni da guadagnare, da 3 a 10 */
+  count: number
+}
+
+export interface ScaleOptions {
+  /** Nomi dei 5 livelli del termometro, dal più alto (5) al più basso (1) */
+  labels: [string, string, string, string, string]
+}
+
+export interface StoryOptions {
+  /** PDF: una scena per pagina invece della griglia */
+  perPage: boolean
+}
+
 export type SheetStatus = 'da-fare' | 'in-lavorazione' | 'pronta' | 'consegnata'
 
 export type ReminderKind = 'creare' | 'stampare' | 'consegnare' | 'rivedere'
@@ -120,6 +143,12 @@ export interface Sheet {
   checklist: ChecklistOptions
   /** Solo Agenda della settimana */
   agenda: AgendaOptions
+  /** Solo Tabella a gettoni */
+  tokens: TokenOptions
+  /** Solo Termometro delle emozioni */
+  scale: ScaleOptions
+  /** Solo Storia sociale */
+  story: StoryOptions
   /** null = scheda non ancora salvata (bozza) */
   folderId: string | null
   status: SheetStatus

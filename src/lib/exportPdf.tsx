@@ -11,7 +11,7 @@ import type { ImageVariant } from './catalog'
 import { downloadBlob } from './download'
 import { lookFor } from './look'
 import type { AppSettings } from './settings'
-import { templates, usesDoneCircle } from './sheet'
+import { templates, usesCutouts } from './sheet'
 
 export type ExportKind = 'stampa' | 'whatsapp'
 
@@ -22,10 +22,7 @@ export type ExportKind = 'stampa' | 'whatsapp'
  * - `reorder`: versione da riordinare (la scheda con i riquadri vuoti, poi le carte mescolate)
  */
 export type ExportContent =
-  | { type: 'full' }
-  | { type: 'stars' }
-  | { type: 'cards'; size: CardSize; strip: boolean }
-  | { type: 'reorder'; size: CardSize }
+  { type: 'full' } | { type: 'stars' } | { type: 'cards'; size: CardSize; strip: boolean } | { type: 'reorder'; size: CardSize }
 
 /** Impostazioni e versioni da colorare disponibili: servono per disegnare le pagine fuori dall'app */
 export interface ExportContext {
@@ -43,7 +40,12 @@ export interface Preset {
 
 export const presets: Record<ExportKind, Preset> = {
   stampa: { dpi: 300, images: 'original', qualities: [null] },
-  whatsapp: { dpi: 150, images: 'web', qualities: [0.85, 0.75, 0.6, 0.45], maxBytes: 2 * 1024 * 1024 },
+  whatsapp: {
+    dpi: 150,
+    images: 'web',
+    qualities: [0.85, 0.75, 0.6, 0.45],
+    maxBytes: 2 * 1024 * 1024,
+  },
 }
 
 const CSS_DPI = 96
@@ -56,7 +58,10 @@ export interface Page {
 
 function pagesFor(sheet: Sheet, preset: Preset, content: ExportContent, ctx: ExportContext): Page[] {
   const look = lookFor(sheet, ctx.settings, ctx.coloringKeys, preset.images)
-  const stars: Page = { element: <CutoutPage title={sheet.title} look={look} />, orientation: 'portrait' }
+  const stars: Page = {
+    element: <CutoutPage title={sheet.title} look={look} />,
+    orientation: 'portrait',
+  }
   switch (content.type) {
     case 'stars':
       return [stars]
@@ -64,21 +69,57 @@ function pagesFor(sheet: Sheet, preset: Preset, content: ExportContent, ctx: Exp
       return cardPages(sheet, look, content.size, content.strip).map((element) => ({ element, orientation: 'portrait' }))
     case 'reorder': {
       // Base: stessa impaginazione con i riquadri vuoti (restano numeri, etichette e orari)
-      const base: Sheet = { ...sheet, cells: sheet.cells.map((c) => ({ ...c, code: null, text: '', symbol: null })) }
+      const base: Sheet = {
+        ...sheet,
+        cells: sheet.cells.map((c) => ({
+          ...c,
+          code: null,
+          text: '',
+          symbol: null,
+        })),
+      }
       return [
-        { element: <PrintSheetView sheet={base} look={{ ...look, slots: true }} />, orientation: templates[sheet.template].orientation },
+        {
+          element: <PrintSheetView sheet={base} look={{ ...look, slots: true }} />,
+          orientation: templates[sheet.template].orientation,
+        },
         ...cardPages(sheet, look, content.size, false, true).map((element): Page => ({ element, orientation: 'portrait' })),
       ]
     }
     default: {
-      const pages: Page[] = [{ element: <PrintSheetView sheet={sheet} look={look} />, orientation: templates[sheet.template].orientation }]
-      if (usesDoneCircle(sheet) && sheet.cutouts) pages.push(stars)
+      const template = templates[sheet.template]
+      const pages: Page[] =
+        template.layout === 'story' && sheet.story.perPage
+          ? storyPages(sheet).map((page) => ({
+              element: <PrintSheetView sheet={page} look={look} />,
+              orientation: 'portrait',
+            }))
+          : [
+              {
+                element: <PrintSheetView sheet={sheet} look={look} />,
+                orientation: template.orientation,
+              },
+            ]
+      if (usesCutouts(sheet)) pages.push(stars)
       return pages
     }
   }
 }
 
 /** Esporta in PDF A4 e avvia il download. */
+/** Storia sociale, una scena per pagina: titolo solo sulla prima; si saltano le scene vuote. */
+export function storyPages(sheet: Sheet): Sheet[] {
+  const cells = sheet.cells.filter((c) => c.code || (c.text ?? '').trim())
+  return cells.map((cell, i) => ({
+    ...sheet,
+    template: 'storia-1',
+    title: i === 0 ? sheet.title : '',
+    subtitle: i === 0 ? sheet.subtitle : '',
+    remember: { ...sheet.remember, enabled: false },
+    cells: [cell],
+  }))
+}
+
 export async function exportPdf(sheet: Sheet, kind: ExportKind, content: ExportContent, ctx: ExportContext): Promise<void> {
   downloadBlob(await sheetPdf(sheet, kind, content, ctx), fileName(sheet, kind, content))
 }
@@ -134,7 +175,12 @@ function fontCSS(node: HTMLElement): Promise<string> {
 }
 
 function buildPdf(title: string, pages: Page[], canvases: HTMLCanvasElement[], jpegQuality: number | null): Blob {
-  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: pages[0].orientation, compress: true })
+  const doc = new jsPDF({
+    unit: 'mm',
+    format: 'a4',
+    orientation: pages[0].orientation,
+    compress: true,
+  })
   doc.setProperties({ title, creator: 'Emovere Studio' })
   pages.forEach((page, i) => {
     if (i > 0) doc.addPage('a4', page.orientation)

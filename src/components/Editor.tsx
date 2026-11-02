@@ -4,7 +4,7 @@ import { CARD_LABEL, cardMetrics, sheetCards, type CardSize } from './Cards'
 import type { ExportContent, ExportKind } from '../lib/exportPdf'
 import { lookFor } from '../lib/look'
 import type { AppSettings } from '../lib/settings'
-import { CHECKLIST_ROWS, canReorder, changeTemplate, retitleForName, templateList, templates, usesDoneCircle } from '../lib/sheet'
+import { CHECKLIST_ROWS, TOKENS, canReorder, changeTemplate, retitleForName, templateList, templates, usesDoneCircle } from '../lib/sheet'
 import { CIRCLE, cutoutGrid } from '../lib/stars'
 import type { SyncStatus } from '../lib/sync'
 import type { CellShow, Folder, Sheet, TemplateId, TimeMode } from '../types'
@@ -80,7 +80,11 @@ export function Editor({
       if (!folder && declinedFor.current !== sheet.id) setAskSave(true)
     } catch (err) {
       console.error(err)
-      alert(err instanceof Error && err.message.includes('vignette') ? err.message : 'Non è stato possibile creare il PDF. Riprova; se succede ancora, ricarica la pagina.')
+      alert(
+        err instanceof Error && err.message.includes('vignette')
+          ? err.message
+          : 'Non è stato possibile creare il PDF. Riprova; se succede ancora, ricarica la pagina.',
+      )
     } finally {
       setExporting(null)
     }
@@ -166,13 +170,7 @@ export function Editor({
         {panelOpen && (
           <aside className="hidden w-80 shrink-0 overflow-y-auto border-r border-line/70 bg-white p-5 md:block">{options}</aside>
         )}
-        <SheetCanvas
-          sheet={sheet}
-          look={look}
-          onChange={onChange}
-          onChooseScene={onChooseScene}
-          onChooseSymbol={onChooseSymbol}
-        />
+        <SheetCanvas sheet={sheet} look={look} onChange={onChange} onChooseScene={onChooseScene} onChooseSymbol={onChooseSymbol} />
       </div>
 
       {/* Telefono: il pannello sale dal basso */}
@@ -230,8 +228,7 @@ export function Editor({
         <Modal title="Salvare la scheda?" onClose={() => setAskSave(false)} size="sm">
           <div className="flex flex-col gap-4">
             <p className="leading-relaxed">
-              Il PDF è pronto. Questa scheda è salvata senza bambino: se è per un bambino in particolare, mettila nella sua
-              cartella.
+              Il PDF è pronto. Questa scheda è salvata senza bambino: se è per un bambino in particolare, mettila nella sua cartella.
             </p>
             <div className="flex flex-wrap justify-end gap-2">
               <Button
@@ -325,13 +322,15 @@ function EditorOptions({
   function handleTemplate(id: TemplateId) {
     const count = templates[id].cols * templates[id].rows
     const lost = sheet.cells.slice(count).filter((c) => c.code).length
-    if (lost > 0 && !confirm(`Il nuovo modello ha ${count} riquadri: ${lost} vignette in fondo verranno tolte. Continuare?`))
-      return
+    if (lost > 0 && !confirm(`Il nuovo modello ha ${count} riquadri: ${lost} vignette in fondo verranno tolte. Continuare?`)) return
     onChange(changeTemplate(sheet, id))
   }
 
   function handleChildName(name: string) {
-    onChange({ childName: name, title: retitleForName(sheet.title, sheet.childName.trim(), name.trim()) })
+    onChange({
+      childName: name,
+      title: retitleForName(sheet.title, sheet.childName.trim(), name.trim()),
+    })
   }
 
   return (
@@ -377,11 +376,29 @@ function EditorOptions({
           />
           <Field label="Momenti della giornata">
             <div className="flex items-center gap-2">
-              <Button small disabled={sheet.agenda.rows <= 1} onClick={() => onChange({ agenda: { ...sheet.agenda, rows: sheet.agenda.rows - 1 } })} aria-label="Un momento in meno">
+              <Button
+                small
+                disabled={sheet.agenda.rows <= 1}
+                onClick={() =>
+                  onChange({
+                    agenda: { ...sheet.agenda, rows: sheet.agenda.rows - 1 },
+                  })
+                }
+                aria-label="Un momento in meno"
+              >
                 −
               </Button>
               <span className="min-w-16 text-center font-bold">{sheet.agenda.rows}</span>
-              <Button small disabled={sheet.agenda.rows >= 4} onClick={() => onChange({ agenda: { ...sheet.agenda, rows: sheet.agenda.rows + 1 } })} aria-label="Un momento in più">
+              <Button
+                small
+                disabled={sheet.agenda.rows >= 4}
+                onClick={() =>
+                  onChange({
+                    agenda: { ...sheet.agenda, rows: sheet.agenda.rows + 1 },
+                  })
+                }
+                aria-label="Un momento in più"
+              >
                 +
               </Button>
             </div>
@@ -411,8 +428,59 @@ function EditorOptions({
               +
             </Button>
           </div>
-          <p className="text-xs text-muted">Da {CHECKLIST_ROWS.min} a {CHECKLIST_ROWS.max}. Le righe nascoste restano salvate.</p>
+          <p className="text-xs text-muted">
+            Da {CHECKLIST_ROWS.min} a {CHECKLIST_ROWS.max}. Le righe nascoste restano salvate.
+          </p>
         </Field>
+      )}
+
+      {template.layout === 'tokens' && (
+        <div className="flex flex-col gap-4 rounded-2xl border border-line p-4">
+          <Field label="Gettoni">
+            <div className="flex items-center gap-2">
+              <Button
+                small
+                disabled={sheet.tokens.count <= TOKENS.min}
+                onClick={() => onChange({ tokens: { count: sheet.tokens.count - 1 } })}
+                aria-label="Un gettone in meno"
+              >
+                −
+              </Button>
+              <span className="min-w-16 text-center font-bold">{sheet.tokens.count}</span>
+              <Button
+                small
+                disabled={sheet.tokens.count >= TOKENS.max}
+                onClick={() => onChange({ tokens: { count: sheet.tokens.count + 1 } })}
+                aria-label="Un gettone in più"
+              >
+                +
+              </Button>
+            </div>
+            <p className="text-xs text-muted">Cerchi da {CIRCLE / 10} cm, come le stelline da ritagliare: si attaccano col velcro.</p>
+          </Field>
+          <Toggle
+            label="Aggiungi stelline da ritagliare al PDF"
+            hint={`Pagina in più con ${cutoutGrid.cols * cutoutGrid.rows} stelline rotonde da usare come gettoni.`}
+            checked={sheet.cutouts}
+            onChange={(cutouts) => onChange({ cutouts })}
+          />
+        </div>
+      )}
+
+      {template.layout === 'story' && (
+        <Toggle
+          label="Nel PDF una scena per pagina"
+          hint="Ogni scena su un foglio A4, con la vignetta e la frase grandi: si può rilegare come un libretto."
+          checked={sheet.story.perPage}
+          onChange={(perPage) => onChange({ story: { perPage } })}
+        />
+      )}
+
+      {template.layout === 'scale' && (
+        <p className="rounded-2xl bg-butter p-4 text-xs leading-snug text-muted">
+          I nomi dei livelli e le frasi (cosa posso fare) si modificano sul foglio. Le emozioni sono possibilità da verificare con il
+          bambino.
+        </p>
       )}
 
       {template.layout !== 'agenda' && (
@@ -439,18 +507,18 @@ function EditorOptions({
       )}
 
       {folder && (
-      <div className="flex flex-col gap-2">
-        <NameInput label="Nome sulle schede (facoltativo)" value={sheet.childName} onChange={handleChildName} />
-        <p className="text-xs text-muted">Vale per tutte le schede di {folder.name}. Si conserva cifrato.</p>
-        {!sheet.childName.trim() && (
-          <button
-            onClick={() => handleChildName(folder.name)}
-            className="self-start rounded-full bg-accent-soft px-3 py-1 text-xs font-bold text-accent hover:bg-accent/15"
-          >
-            Usa “{folder.name}”
-          </button>
-        )}
-      </div>
+        <div className="flex flex-col gap-2">
+          <NameInput label="Nome sulle schede (facoltativo)" value={sheet.childName} onChange={handleChildName} />
+          <p className="text-xs text-muted">Vale per tutte le schede di {folder.name}. Si conserva cifrato.</p>
+          {!sheet.childName.trim() && (
+            <button
+              onClick={() => handleChildName(folder.name)}
+              className="self-start rounded-full bg-accent-soft px-3 py-1 text-xs font-bold text-accent hover:bg-accent/15"
+            >
+              Usa “{folder.name}”
+            </button>
+          )}
+        </div>
       )}
 
       <Toggle
@@ -477,7 +545,7 @@ function EditorOptions({
         </Field>
       )}
 
-      {template.orientation === 'portrait' && (
+      {template.orientation === 'portrait' && template.layout !== 'wait' && template.layout !== 'scale' && (
         <Toggle
           label="Riquadro “Ricordo sempre”"
           checked={sheet.remember.enabled}
@@ -485,25 +553,25 @@ function EditorOptions({
         />
       )}
 
-      {template.layout !== 'checklist' && sheet.sequence.show !== 'text' && (
-      <div className="flex flex-col gap-3">
-        <Toggle
-          label="Cerchietto per la stellina"
-          hint={`In alto a destra di ogni vignetta, ${CIRCLE / 10} cm: col velcro ci si attacca la stellina “fatto”.`}
-          checked={sheet.doneCircle}
-          onChange={(doneCircle) => onChange({ doneCircle })}
-        />
-        {sheet.doneCircle && (
-          <div className="rounded-2xl bg-butter p-4">
-            <Toggle
-              label="Aggiungi stelline da ritagliare al PDF"
-              hint={`Pagina in più con ${cutoutGrid.cols * cutoutGrid.rows} stelline rotonde. Solo le stelline: menu Esporta.`}
-              checked={sheet.cutouts}
-              onChange={(cutouts) => onChange({ cutouts })}
-            />
-          </div>
-        )}
-      </div>
+      {['grid', 'stack', 'sequence', 'agenda', 'story'].includes(template.layout) && sheet.sequence.show !== 'text' && (
+        <div className="flex flex-col gap-3">
+          <Toggle
+            label="Cerchietto per la stellina"
+            hint={`In alto a destra di ogni vignetta, ${CIRCLE / 10} cm: col velcro ci si attacca la stellina “fatto”.`}
+            checked={sheet.doneCircle}
+            onChange={(doneCircle) => onChange({ doneCircle })}
+          />
+          {sheet.doneCircle && (
+            <div className="rounded-2xl bg-butter p-4">
+              <Toggle
+                label="Aggiungi stelline da ritagliare al PDF"
+                hint={`Pagina in più con ${cutoutGrid.cols * cutoutGrid.rows} stelline rotonde. Solo le stelline: menu Esporta.`}
+                checked={sheet.cutouts}
+                onChange={(cutouts) => onChange({ cutouts })}
+              />
+            </div>
+          )}
+        </div>
       )}
 
       <Toggle
@@ -529,9 +597,9 @@ function EditorOptions({
       <NotesField value={sheet.notes} onChange={(notes) => onChange({ notes })} />
 
       <p className="text-sm leading-relaxed text-muted">
-        Tocca un riquadro vuoto per scegliere la vignetta. Su un riquadro pieno passa sopra (o toccalo, su tablet) per
-        cambiarla, svuotarla o aggiungere un simbolo. Trascina i riquadri per cambiare l'ordine (su tablet: tieni premuto e
-        trascina). Titolo, frasi e orari si modificano sul foglio.
+        Tocca un riquadro vuoto per scegliere la vignetta. Su un riquadro pieno passa sopra (o toccalo, su tablet) per cambiarla, svuotarla
+        o aggiungere un simbolo. Trascina i riquadri per cambiare l'ordine (su tablet: tieni premuto e trascina). Titolo, frasi e orari si
+        modificano sul foglio.
       </p>
 
       <Button onClick={onNew}>+ Nuova scheda</Button>
@@ -653,7 +721,7 @@ function ExportMenu({
           {item('Carte da ritagliare…', 'Le vignette come carte singole', () => onCards('cards'))}
           {canReorder(templates[sheet.template]) &&
             item('Versione da riordinare…', 'Base vuota + vignette mescolate da ritagliare', () => onCards('reorder'))}
-          {usesDoneCircle(sheet) && (
+          {(usesDoneCircle(sheet) || templates[sheet.template].layout === 'tokens') && (
             <>
               <li role="separator" className="mx-3 my-1 border-t border-line/70" />
               {item('Stelline · stampa', 'Solo la pagina di stelline da ritagliare', () => onExport('stampa', { type: 'stars' }))}
@@ -698,15 +766,20 @@ function CardsDialog({
           <>
             {mode === 'reorder' ? (
               <p className="leading-relaxed text-muted">
-                Pagina 1: la scheda con i riquadri vuoti{sheet.sequence.numbers && templates[sheet.template].numbered ? ' e numerati' : ''}, la
-                base dove attaccare le carte. Poi le {count} carte <strong className="text-ink">in ordine mescolato</strong>, da
-                ritagliare e rimettere in ordine. Scegli una misura che entri nei riquadri.
+                Pagina 1: la scheda con i riquadri vuoti
+                {sheet.sequence.numbers && templates[sheet.template].numbered ? ' e numerati' : ''}, la base dove attaccare le carte. Poi le{' '}
+                {count} carte <strong className="text-ink">in ordine mescolato</strong>, da ritagliare e rimettere in ordine. Scegli una
+                misura che entri nei riquadri.
               </p>
             ) : (
               <p className="text-muted">
                 {count} {count === 1 ? 'carta' : 'carte'}
-                {sheet.sequence.show === 'images' ? ' con la vignetta' : sheet.sequence.show === 'text' ? ' con la frase' : ' con vignetta e frase'}, linee
-                di taglio tratteggiate.
+                {sheet.sequence.show === 'images'
+                  ? ' con la vignetta'
+                  : sheet.sequence.show === 'text'
+                    ? ' con la frase'
+                    : ' con vignetta e frase'}
+                , linee di taglio tratteggiate.
               </p>
             )}
             <div role="radiogroup" aria-label="Misura" className="flex flex-col gap-2">
@@ -729,16 +802,17 @@ function CardsDialog({
               })}
             </div>
             {mode === 'cards' && (
-            <Toggle
-              label="Aggiungi striscia agenda"
-              hint={`Pagina in più: ${count} caselle vuote della stessa misura e in fondo “FINITO”, per agende con velcro.`}
-              checked={strip}
-              onChange={setStrip}
-            />
+              <Toggle
+                label="Aggiungi striscia agenda"
+                hint={`Pagina in più: ${count} caselle vuote della stessa misura e in fondo “FINITO”, per agende con velcro.`}
+                checked={strip}
+                onChange={setStrip}
+              />
             )}
             <p className="text-sm text-muted">
               {mode === 'reorder' ? '1 pagina di base + ' : ''}
-              {pages} {pages === 1 ? 'pagina' : 'pagine'} di carte{strip && mode === 'cards' ? ' + striscia agenda' : ''}
+              {pages} {pages === 1 ? 'pagina' : 'pagine'} di carte
+              {strip && mode === 'cards' ? ' + striscia agenda' : ''}
               {sheet.coloring ? ' · versione da colorare' : ''}.
             </p>
           </>
@@ -803,7 +877,12 @@ function SheetCanvas({
             className="m-auto shrink-0 overflow-hidden rounded-lg bg-white shadow-[0_8px_30px_rgba(59,56,70,0.10)]"
             style={{ width: pageW * scale, height: pageH * scale }}
           >
-            <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+            <div
+              style={{
+                transform: `scale(${scale})`,
+                transformOrigin: 'top left',
+              }}
+            >
               <SheetView
                 sheet={sheet}
                 look={look}
