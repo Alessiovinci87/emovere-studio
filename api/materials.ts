@@ -12,15 +12,23 @@
 //          scheda in un altro bambino) finisce nello storico dell'obiettivo: goalEvents = [{ goalId, event }]
 //   DELETE ?id=                  → eliminazione definitiva (solo titolare; gli altri usano il cestino)
 //
+// Link per la famiglia (api/_lib/shares.ts), tutti i membri:
+//   GET ?id=&shares=1                          → { shares }  link attivi del materiale
+//   POST ?action=share { id, pdf, days }       → { token, share }  pdf = data URL del PDF WhatsApp, days 7 o 30
+//   DELETE ?action=share&id=&link={impronta}   → revoca subito
+//   GET ?condiviso={token}  (pubblica, senza login: il middleware la lascia passare) → il PDF, se il link è valido,
+//          non scaduto e il materiale (e il suo bambino) non è nel cestino; ogni apertura va nel registro
+//
 // Il contenuto (lo Sheet dell'app) arriva senza i campi che stanno in colonne proprie: il server toglie
 // id, folderId, childName, notes, status, reminder e date. Il nome del bambino non si salva mai nel materiale.
 import { randomUUID } from 'node:crypto'
 import { requireUser } from './_lib/auth.js'
-import { asUser, audit, requireMembership, type Tx } from './_lib/db.js'
+import { asSystem, asUser, audit, requireMembership, type Tx } from './_lib/db.js'
 import { UserError, handle, json } from './_lib/http.js'
 import { defined, optBool, optOneOf, optText, readBody, uuid, type Body } from './_lib/input.js'
 import { eventOut, type EventRow } from './_lib/goals.js'
 import { sealerFor, type Sealer } from './_lib/keys.js'
+import { SHARE_DAYS, createShare, listShares, openShare, revokeShare } from './_lib/shares.js'
 
 const KINDS = ['scheda', 'storia_sociale', 'scenario', 'sequenza', 'guida', 'caa', 'rinforzo', 'attivita'] as const
 const STATUSES = ['da-fare', 'in-lavorazione', 'pronta', 'consegnata'] as const
@@ -94,12 +102,18 @@ async function load(tx: Tx, orgId: string, id: string, lock = false): Promise<Ma
 
 export function GET(request: Request): Promise<Response> {
   return handle(async () => {
-    const user = await requireUser(request)
     const params = new URL(request.url).searchParams
+    const shareToken = params.get('condiviso')
+    if (shareToken !== null) return openSharedPdf(shareToken)
+    const user = await requireUser(request)
     const id = params.get('id')
     return json(
       await asUser(user.id, async (tx) => {
         const { orgId, s } = await context(tx, user.id)
+        if (id !== null && params.get('shares') === '1') {
+          await load(tx, orgId, uuid(id))
+          return { shares: await listShares(tx, orgId, uuid(id)) }
+        }
         if (id === null) {
           const child = params.get('child')
           const filter =
@@ -158,6 +172,7 @@ export function POST(request: Request): Promise<Response> {
     const body = await readBody(request)
     if (action === 'duplicate') return json(await duplicate(user.id, body))
     if (action === 'version') return json(await saveVersion(user.id, body))
+    if (action === 'share') return json(await share(user.id, body))
     if (action !== null) throw new UserError('Richiesta non valida.')
 
     const childId = 'childId' in body && body.childId !== null ? uuid(body.childId) : null
@@ -307,7 +322,19 @@ export function PATCH(request: Request): Promise<Response> {
 export function DELETE(request: Request): Promise<Response> {
   return handle(async () => {
     const user = await requireUser(request)
-    const id = uuid(new URL(request.url).searchParams.get('id'))
+    const params = new URL(request.url).searchParams
+    const id = uuid(params.get('id'))
+    if (params.get('action') === 'share') {
+      return json(
+        await asUser(user.id, async (tx) => {
+          const { orgId } = await requireMembership(tx, user.id)
+          const row = await load(tx, orgId, id)
+          await revokeShare(tx, orgId, id, params.get('link') ?? '')
+          await audit(tx, { orgId, action: 'elimina', entity: 'material_shares', entityId: id, childId: row.child_id, details: { revoca: true } })
+          return { ok: true }
+        }),
+      )
+    }
     return json(
       await asUser(user.id, async (tx) => {
         const { orgId } = await requireMembership(tx, user.id, 'titolare')
@@ -318,6 +345,60 @@ export function DELETE(request: Request): Promise<Response> {
         return { ok: true }
       }),
     )
+  })
+}
+
+/** Nuovo link per la famiglia: il PDF arriva già pronto dall'app (versione WhatsApp, con il nome sulle schede). */
+async function share(userId: string, body: Body) {
+  const id = uuid(body.id)
+  const days = Number(body.days)
+  if (!SHARE_DAYS.includes(days as (typeof SHARE_DAYS)[number]) || typeof body.pdf !== 'string') throw new UserError('Richiesta non valida.')
+  return asUser(userId, async (tx) => {
+    const { orgId } = await requireMembership(tx, userId)
+    const row = await load(tx, orgId, id)
+    if (row.deleted_at) throw new UserError('La scheda è nel cestino.')
+    const result = await createShare(tx, { orgId, userId, materialId: id, childId: row.child_id, title: row.title, pdf: body.pdf as string, days })
+    await audit(tx, { orgId, action: 'esporta', entity: 'material_shares', entityId: id, childId: row.child_id, details: { link: true, giorni: days } })
+    return result
+  })
+}
+
+/** Apertura dal link: nessun utente, il token è l'unica chiave. Risposta uguale per link sbagliati, scaduti o revocati. */
+async function openSharedPdf(token: string): Promise<Response> {
+  const notFound = () =>
+    new Response('Questo link non è più valido: è scaduto o è stato revocato. Chiedi un nuovo link a chi te lo ha mandato.', {
+      status: 404,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' },
+    })
+  const opened = await openShare(token)
+  if (!opened) return notFound()
+  const { meta, pdf } = opened
+  const available = await asSystem(async (tx) => {
+    const [row] = await tx<{ ok: boolean }[]>`
+      select true as ok from app.materials m
+      where m.id = ${meta.materialId} and m.org_id = ${meta.orgId} and m.deleted_at is null
+        and (m.child_id is null or exists (select 1 from app.children c where c.id = m.child_id and c.deleted_at is null))`
+    if (!row) return false
+    await audit(tx, {
+      orgId: meta.orgId,
+      action: 'legge',
+      entity: 'material_shares',
+      entityId: meta.materialId,
+      childId: meta.childId,
+      details: { link: true, automatico: true },
+    })
+    return true
+  })
+  if (!available) return notFound()
+  const name = (meta.title || 'Scheda').normalize('NFD').replace(/[^\w -]/g, '').trim().replace(/\s+/g, '-') || 'Scheda'
+  return new Response(new Uint8Array(pdf), {
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${name}.pdf"`,
+      'Cache-Control': 'private, no-store',
+      'X-Robots-Tag': 'noindex',
+      'Referrer-Policy': 'no-referrer',
+    },
   })
 }
 

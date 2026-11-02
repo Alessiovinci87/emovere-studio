@@ -1,7 +1,7 @@
 // /api/organization — impostazioni del centro riservate al titolare, registro degli accessi, pulizia notturna.
 //   PATCH { privacyVerified?: boolean, dataController?: string, settings?: {…} } → { privacyVerifiedAt, dataController, settings }
 //   GET ?resource=audit [&before={id}&child={id}&user={id}&action=…] → { entries, next }  (solo titolare, 100 per volta)
-//   GET ?action=purge  → { childrenDeleted, materialsDeleted }  solo Vercel Cron (Authorization: Bearer CRON_SECRET)
+//   GET ?action=purge  → { childrenDeleted, materialsDeleted, sharesDeleted }  solo Vercel Cron (Authorization: Bearer CRON_SECRET)
 //   Appunti sull'app (api/_lib/notes.ts), tutti i membri:
 //   GET ?resource=notes → { notes }   POST ?resource=notes { screen, context?, kind, text } → { note }
 //   PATCH ?resource=notes { id, kind?, text? (autore), status?, reply? (titolare) } → { note }   DELETE ?resource=notes&id= (autore o titolare)
@@ -14,6 +14,7 @@ import { asSystem, asUser, audit, requireMembership } from './_lib/db.js'
 import { UserError, handle, json } from './_lib/http.js'
 import { isUuid } from './_lib/input.js'
 import { createNote, deleteNote, listNotes, updateNote } from './_lib/notes.js'
+import { purgeExpiredShares } from './_lib/shares.js'
 
 const AUDIT_ACTIONS = ['crea', 'legge', 'modifica', 'esporta', 'elimina', 'ripristina', 'importa']
 const AUDIT_PAGE = 100
@@ -94,7 +95,8 @@ async function purge(request: Request) {
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) throw new UserError('Non autorizzato.', 401)
   const [row] = await asSystem((tx) => tx<{ children_deleted: number; materials_deleted: number }[]>`
     select * from private.purge_deleted(30)`)
-  return { childrenDeleted: row.children_deleted, materialsDeleted: row.materials_deleted }
+  const sharesDeleted = await purgeExpiredShares()
+  return { childrenDeleted: row.children_deleted, materialsDeleted: row.materials_deleted, sharesDeleted }
 }
 
 const isNotes = (request: Request) => new URL(request.url).searchParams.get('resource') === 'notes'

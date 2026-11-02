@@ -600,6 +600,7 @@ Non si può annullare.`)) return
             onOpenFolder={openFolder}
             onNew={() => navigate({ name: 'crea', folderId: editing.folderId ?? undefined })}
             onPlay={() => navigate({ name: 'usa', id: editing.id })}
+            testData={!session.account?.organization?.privacyVerifiedAt}
             onClose={() => back(editingFolder ? { name: 'cartella', id: editingFolder.id } : { name: 'oggi' })}
           />
         ) : (

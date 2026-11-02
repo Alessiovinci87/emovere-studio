@@ -73,6 +73,8 @@ function describe(entry: AuditEntry): string {
   if (d.note) parts.push('nota')
   if (d.definitivo) parts.push('per sempre')
   if (d.copiaDi) parts.push('copia')
+  if (d.giorni) parts.push(`valido ${d.giorni} giorni`)
+  if (d.revoca) parts.push('revocato')
   return parts.join(' · ')
 }
 
@@ -182,7 +184,7 @@ export function AuditLogDialog({ folders, onClose }: { folders: Folder[]; onClos
                     {extra && <span className="block text-xs text-muted">{extra}</span>}
                   </span>
                   <span className="shrink-0 text-sm text-muted">
-                    {e.user ? (e.user.name ?? 'persona non più nel centro') : 'Pulizia automatica'}
+                    {e.user ? (e.user.name ?? 'persona non più nel centro') : e.details.link ? 'Aperto dal link' : 'Pulizia automatica'}
                   </span>
                 </li>
               )

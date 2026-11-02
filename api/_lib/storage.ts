@@ -148,3 +148,14 @@ export function photoPath(orgId: string, code: string): string {
 export async function deleteImages(pathnames: string[]): Promise<void> {
   await del(pathnames)
 }
+
+/** File binario privato (link per la famiglia: PDF già cifrato) */
+export async function putBytes(pathname: string, bytes: Buffer): Promise<void> {
+  await put(pathname, bytes, { access: 'private', addRandomSuffix: false, allowOverwrite: false, contentType: 'application/octet-stream' })
+}
+
+export async function readBytes(pathname: string): Promise<Buffer | null> {
+  const result = await get(pathname, { access: 'private', useCache: false })
+  if (!result || result.statusCode !== 200) return null
+  return Buffer.from(await new Response(result.stream).arrayBuffer())
+}

@@ -1,3 +1,4 @@
+import { ShareDialog } from './ShareDialog'
 import { canUseOnTablet } from '../views/ChildModeView'
 import { useNoteDetail } from '../lib/appNotes'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
@@ -45,6 +46,8 @@ interface Props {
   onNew: () => void
   /** Modalità bambino: la scheda sul tablet */
   onPlay: () => void
+  /** "Privacy verificata" non attiva: il link per la famiglia ricorda che si usano solo dati di prova */
+  testData: boolean
   onClose: () => void
 }
 
@@ -63,6 +66,7 @@ export function Editor({
   onOpenFolder,
   onNew,
   onPlay,
+  testData,
   onClose,
 }: Props) {
   useNoteDetail(templates[sheet.template].label)
@@ -71,6 +75,7 @@ export function Editor({
   const [sheetOpen, setSheetOpen] = useState(false)
   const [exporting, setExporting] = useState<ExportKind | null>(null)
   const [cardsOpen, setCardsOpen] = useState<CardsMode | null>(null)
+  const [shareOpen, setShareOpen] = useState(false)
   const [askSave, setAskSave] = useState(false)
   /** Bozza per cui si è già risposto "No, grazie": non si ripropone a ogni PDF */
   const declinedFor = useRef<string | null>(null)
@@ -154,6 +159,7 @@ export function Editor({
           busy={exporting}
           onExport={handleExport}
           onCards={setCardsOpen}
+          onShare={() => setShareOpen(true)}
           onColoring={(value) => onChange({ coloring: value })}
         />
 
@@ -223,6 +229,19 @@ export function Editor({
             </div>
           </div>
         </div>
+      )}
+
+      {shareOpen && (
+        <ShareDialog
+          materialId={sheet.id}
+          testData={testData}
+          makePdf={async () => {
+            const { sheetPdf } = await import('../lib/exportPdf')
+            const blob = await sheetPdf(sheet, 'whatsapp', { type: 'full' }, { settings, coloringKeys })
+            return blobToDataUrl(blob)
+          }}
+          onClose={() => setShareOpen(false)}
+        />
       )}
 
       {cardsOpen && (
@@ -651,18 +670,29 @@ function Segmented<T extends string>({ value, options, onChange }: { value: T; o
   )
 }
 
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(new Error('Non riesco a leggere il PDF.'))
+    reader.readAsDataURL(blob)
+  })
+}
+
 /** Menu "Esporta": PDF stampa, PDF WhatsApp, carte da ritagliare, stelline, versione da colorare. */
 function ExportMenu({
   sheet,
   busy,
   onExport,
   onCards,
+  onShare,
   onColoring,
 }: {
   sheet: Sheet
   busy: ExportKind | null
   onExport: (kind: ExportKind, content?: ExportContent) => void
   onCards: (mode: CardsMode) => void
+  onShare: () => void
   onColoring: (value: boolean) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -732,6 +762,7 @@ function ExportMenu({
           <li role="separator" className="mx-3 my-1 border-t border-line/70" />
           {item('PDF stampa', 'A4 alta qualità, da plastificare', () => onExport('stampa'))}
           {item('PDF WhatsApp', 'File leggero da inviare', () => onExport('whatsapp'))}
+          {item('Link per la famiglia…', 'La scheda si apre dal telefono, senza account', onShare)}
           {item('Carte da ritagliare…', 'Le vignette come carte singole', () => onCards('cards'))}
           {canReorder(templates[sheet.template]) &&
             item('Versione da riordinare…', 'Base vuota + vignette mescolate da ritagliare', () => onCards('reorder'))}

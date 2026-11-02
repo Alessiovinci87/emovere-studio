@@ -22,6 +22,18 @@ export function trashDaysLeft(deletedAt: string, now = Date.now()): number {
   return Math.max(0, Math.ceil((new Date(deletedAt).getTime() + TRASH_DAYS * 86_400_000 - now) / 86_400_000))
 }
 
+/** Link per la famiglia (il token si vede solo alla creazione: il server conserva l'impronta) */
+export interface MaterialShare {
+  id: string
+  materialId: string
+  createdAt: string
+  expiresAt: string
+}
+
+export function shareUrl(token: string): string {
+  return `${location.origin}/api/materials?condiviso=${token}`
+}
+
 export interface ServerMaterial {
   id: string
   childId: string | null
@@ -97,5 +109,10 @@ export const materialsApi = {
       '/api/materials?action=duplicate',
       send('POST', childId === undefined ? { id } : { id, childId }),
     )).material,
+  shares: async (id: string) => (await call<{ shares: MaterialShare[] }>(`/api/materials?id=${encodeURIComponent(id)}&shares=1`)).shares,
+  share: (id: string, pdf: string, days: 7 | 30) =>
+    call<{ token: string; share: MaterialShare }>('/api/materials?action=share', send('POST', { id, pdf, days })),
+  revokeShare: (id: string, link: string) =>
+    call<{ ok: true }>(`/api/materials?action=share&id=${encodeURIComponent(id)}&link=${encodeURIComponent(link)}`, send('DELETE')),
   remove: (id: string) => call<{ ok: true }>(`/api/materials?id=${encodeURIComponent(id)}`, send('DELETE')),
 }

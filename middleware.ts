@@ -34,6 +34,11 @@ export default async function middleware(request: Request): Promise<Response> {
     return next()
   }
 
+  // Link per la famiglia: chi lo apre non ha account. La funzione controlla il token (scadenza, revoca, cestino).
+  if (url.pathname === '/api/materials' && request.method === 'GET' && url.searchParams.has('condiviso')) {
+    return next()
+  }
+
   const password = process.env.APP_PASSWORD
   if (password) {
     const token = await tokenFor(password)
