@@ -1,5 +1,6 @@
 import { useNoteDetail } from '../lib/appNotes'
 import { useEffect, useId, useRef, useState } from 'react'
+import { GoalBankPicker } from '../components/child/GoalBankPicker'
 import { SourceChip, ErrorText } from '../components/child/ProfileTab'
 import { CharacterToggle } from '../components/CharacterToggle'
 import { SequenceProposalEditor } from '../components/flow/SequenceProposal'
@@ -68,7 +69,8 @@ export function NewMaterialView(props: Props) {
   const [detailError, setDetailError] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const [goal, setGoal] = useState<GoalChoice | null>(initialGoalId ? { mode: 'existing', id: initialGoalId } : null)
-  const [newGoal, setNewGoal] = useState<{ title: string; area: GoalArea | null }>({ title: '', area: null })
+  const [newGoal, setNewGoal] = useState<{ title: string; area: GoalArea | null; description?: string }>({ title: '', area: null })
+  const [goalBank, setGoalBank] = useState(false)
   /** Materiale generico: obiettivo solo per la proposta, non si salva */
   const [freeGoal, setFreeGoal] = useState('')
   const [situation, setSituation] = useState('')
@@ -188,7 +190,7 @@ export function NewMaterialView(props: Props) {
   async function goalId(): Promise<string | null> {
     if (!childId || !goal) return null
     if (goal.mode === 'existing') return goal.id
-    const created = await childApi.addGoal({ childId, title: newGoal.title.trim(), area: newGoal.area ?? undefined })
+    const created = await childApi.addGoal({ childId, title: newGoal.title.trim(), description: newGoal.description || undefined, area: newGoal.area ?? undefined })
     setGoal({ mode: 'existing', id: created.id })
     setDetail((d) => (d ? { ...d, goals: [...d.goals, created] } : d))
     return created.id
@@ -315,6 +317,21 @@ export function NewMaterialView(props: Props) {
                     : 'Scegli uno degli obiettivi attivi o creane uno nuovo: il materiale si collega da solo e il collegamento resta nello storico.'
                 }
               />
+              {(childId === null || goal?.mode === 'new') && (
+                <button type="button" onClick={() => setGoalBank(true)} className="self-start text-sm font-bold text-accent underline">
+                  Parti da un obiettivo pronto
+                </button>
+              )}
+              {goalBank && (
+                <GoalBankPicker
+                  onClose={() => setGoalBank(false)}
+                  onPick={(g) => {
+                    if (childId === null) setFreeGoal(g.title)
+                    else setNewGoal({ title: g.title, area: g.area, description: g.description })
+                    setGoalBank(false)
+                  }}
+                />
+              )}
               {childId === null ? (
                 <TextArea label="Obiettivo" value={freeGoal} max={FLOW_MAX.goal} rows={2} placeholder="Es. Lavarsi le mani da solo prima di pranzo" onChange={setFreeGoal} />
               ) : detailError ? (
@@ -349,6 +366,14 @@ export function NewMaterialView(props: Props) {
                         rows={2}
                         placeholder="Es. Aspettare il proprio turno nel gioco"
                         onChange={(title) => setNewGoal((g) => ({ ...g, title }))}
+                      />
+                      <TextArea
+                        label="Descrizione (facoltativa)"
+                        value={newGoal.description ?? ''}
+                        max={4000}
+                        rows={3}
+                        placeholder="Comportamento osservabile, contesto, come capire che è raggiunto"
+                        onChange={(description) => setNewGoal((g) => ({ ...g, description }))}
                       />
                       <label className="flex flex-col gap-1.5">
                         <span className="text-sm font-bold">Area (facoltativa)</span>

@@ -3,6 +3,7 @@ import { GOAL_AREAS, GOAL_STATUSES, goalStatusInfo, type GoalArea, type GoalStat
 import { childApi, longDate, type Goal, type GoalEvent } from '../../lib/childApi'
 import { Modal } from '../Modal'
 import { Button, PrivacyNote, inputClass } from '../ui'
+import { GoalBankPicker } from './GoalBankPicker'
 import { ErrorText } from './ProfileTab'
 
 // Obiettivi del bambino: attivi, raggiunti, archiviati. Ogni cambio di stato (con nota), ogni nota e ogni
@@ -265,6 +266,7 @@ function GoalDialog({
   const [area, setArea] = useState<GoalArea | ''>(initial?.area ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [bank, setBank] = useState(false)
   const titleNote = useId()
   const descNote = useId()
 
@@ -285,6 +287,11 @@ function GoalDialog({
           }
         }}
       >
+        {!initial && (
+          <button type="button" onClick={() => setBank(true)} className="self-start text-sm font-bold text-accent underline">
+            Parti da un obiettivo pronto
+          </button>
+        )}
         <label className="flex flex-col gap-1.5">
           <span className="text-sm font-bold">Obiettivo</span>
           <input
@@ -332,6 +339,17 @@ function GoalDialog({
           </Button>
         </div>
       </form>
+      {bank && (
+        <GoalBankPicker
+          onClose={() => setBank(false)}
+          onPick={(g) => {
+            setText(g.title)
+            setDescription(g.description)
+            setArea(g.area)
+            setBank(false)
+          }}
+        />
+      )}
     </Modal>
   )
 }

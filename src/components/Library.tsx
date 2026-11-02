@@ -3,6 +3,7 @@ import { blockLabel, filterScenes, sceneThumb, sceneTitle, usedBlocks, usedOutfi
 import type { Character, Scene } from '../types'
 import { CharacterToggle } from './CharacterToggle'
 import { TrashIcon } from './Icons'
+import { FilterChip as Chip } from './ui'
 
 interface Props {
   character: Character
@@ -172,29 +173,5 @@ export function Library({
         </ul>
       )}
     </div>
-  )
-}
-
-function Chip({
-  active,
-  onClick,
-  small,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  small?: boolean
-  children: React.ReactNode
-}) {
-  return (
-    <button
-      onClick={onClick}
-      aria-pressed={active}
-      className={`rounded-full border font-bold transition ${small ? 'px-3 py-1 text-xs' : 'px-4 py-1.5 text-sm'} ${
-        active ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-white text-muted hover:text-ink'
-      }`}
-    >
-      {children}
-    </button>
   )
 }

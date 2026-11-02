@@ -116,3 +116,29 @@ export function Button({
     />
   )
 }
+
+/** Filtro a pillola (Libreria, obiettivi pronti…) */
+export function FilterChip({
+  active,
+  onClick,
+  small,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  small?: boolean
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`rounded-full border font-bold transition ${small ? 'px-3 py-1 text-xs' : 'px-4 py-1.5 text-sm'} ${
+        active ? 'border-accent bg-accent-soft text-accent' : 'border-line bg-white text-muted hover:text-ink'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
