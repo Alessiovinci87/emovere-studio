@@ -212,7 +212,7 @@
     {
       "code": "B08", "block": "B",
       "title_f": "Vado in bagno quando mi scappa", "title_m": "Vado in bagno quando mi scappa",
-      "setting": "bagno", "outfit": "casa",
+      "setting": "bagno", "outfit": "pigiama",
       "actions": ["andare in bagno", "camminare"],
       "objects": ["porta", "water"],
       "tags": ["igiene", "bagno", "water", "autonomia", "controllo sfinterico"],
@@ -221,7 +221,7 @@
     {
       "code": "B09", "block": "B",
       "title_f": "Tiro lo sciacquone", "title_m": "Tiro lo sciacquone",
-      "setting": "bagno", "outfit": "casa",
+      "setting": "bagno", "outfit": "pigiama",
       "actions": ["tirare lo sciacquone"],
       "objects": ["water", "pulsante"],
       "tags": ["igiene", "bagno", "water", "autonomia", "controllo sfinterico"],

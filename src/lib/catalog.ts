@@ -65,6 +65,7 @@ export interface SceneFilters {
   query: string
   block: string | null
   setting: string | null
+  outfit?: string | null
   character: Character
 }
 
@@ -73,6 +74,7 @@ export function filterScenes(f: SceneFilters): Scene[] {
   return scenes.filter((s) => {
     if (f.block && s.block !== f.block) return false
     if (f.setting && s.setting !== f.setting) return false
+    if (f.outfit && s.outfit !== f.outfit) return false
     if (!s.characters.includes(f.character)) return false
     const haystack = searchIndex.get(s.code) ?? ''
     return words.every((w) => haystack.includes(w))
@@ -86,4 +88,9 @@ export function usedBlocks(): string[] {
 
 export function usedSettings(): string[] {
   return [...new Set(scenes.map((s) => s.setting))].sort()
+}
+
+/** Abbigliamenti presenti (casa, pigiama…): per scegliere vignette coerenti nella stessa scheda */
+export function usedOutfits(): string[] {
+  return [...new Set(scenes.map((s) => s.outfit).filter(Boolean))].sort()
 }

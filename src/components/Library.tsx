@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { blockLabel, filterScenes, sceneThumb, sceneTitle, usedBlocks, usedSettings } from '../lib/catalog'
+import { blockLabel, filterScenes, sceneThumb, sceneTitle, usedBlocks, usedOutfits, usedSettings } from '../lib/catalog'
 import type { Character, Scene } from '../types'
 import { CharacterToggle } from './CharacterToggle'
 import { TrashIcon } from './Icons'
@@ -33,12 +33,13 @@ export function Library({
   const [query, setQuery] = useState('')
   const [block, setBlock] = useState<string | null>(null)
   const [setting, setSetting] = useState<string | null>(null)
+  const [outfit, setOutfit] = useState<string | null>(null)
 
   const scenes = useMemo(
-    () => filterScenes({ query, block, setting, character }),
-    [query, block, setting, character],
+    () => filterScenes({ query, block, setting, outfit, character }),
+    [query, block, setting, outfit, character],
   )
-  const hasFilters = query !== '' || block !== null || setting !== null
+  const hasFilters = query !== '' || block !== null || setting !== null || outfit !== null
 
   return (
     <div className="flex flex-col gap-5">
@@ -81,6 +82,18 @@ export function Library({
             </Chip>
           ))}
         </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted">Abbigliamento:</span>
+          <Chip active={outfit === null} onClick={() => setOutfit(null)} small>
+            Tutti
+          </Chip>
+          {usedOutfits().map((o) => (
+            <Chip key={o} active={outfit === o} onClick={() => setOutfit(outfit === o ? null : o)} small>
+              {o.charAt(0).toUpperCase() + o.slice(1)}
+            </Chip>
+          ))}
+        </div>
       </div>
 
       {scenes.length === 0 ? (
@@ -93,6 +106,7 @@ export function Library({
                 setQuery('')
                 setBlock(null)
                 setSetting(null)
+                setOutfit(null)
               }}
             >
               Togli i filtri
