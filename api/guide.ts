@@ -2,6 +2,7 @@
 //   POST { input, childId?, profileIds? }                   → { family: string[10], school: string[10] }
 //   POST { input, point: { version, index, current }, … }   → { text }  rigenera un solo punto
 //   POST { sequence, childId?, profileIds? }                → { title, steps: [{ text, code }] }  (code: vignetta o null)
+//        sequence.kind = 'storia' → storia sociale (4 o 6 scene, stessa forma di risposta)
 // Il testo inviato all'AI è solo quello di guideRequestText / sequenceRequestText (lo stesso dell'anteprima nell'app).
 // Le voci del profilo arrivano come id: il server le legge (stesso bambino, non archiviate), le decifra e le mette nel
 // testo con profileRequestText. Mai nomi o dati identificativi: il server li cerca (formati riconoscibili, pseudonimi e
@@ -17,6 +18,7 @@ import {
   sequenceFields,
   sequenceInstructions,
   sequenceRequestText,
+  storyInstructions,
   sortProfileLines,
   type ProfileLine,
   type SequenceInput,
@@ -180,9 +182,11 @@ async function proposeSequence(
   const codes = scenes.map((s) => s.code)
   const { value, usage } = await structuredText<{ titolo: string; passaggi: { frase: string; vignetta: string }[] }>({
     model: AI_MODELS.guide,
-    instructions: sequenceInstructions(scenes.map((s) => `${s.code}: ${title(s)} (${s.tags.join(', ')})`)),
+    instructions: (input.kind === 'storia' ? storyInstructions : sequenceInstructions)(
+      scenes.map((s) => `${s.code}: ${title(s)} (${s.tags.join(', ')})`),
+    ),
     input: requestText,
-    name: 'sequence',
+    name: input.kind === 'storia' ? 'social_story' : 'sequence',
     schema: {
       type: 'object',
       properties: {
@@ -202,10 +206,12 @@ async function proposeSequence(
     },
     reasoning: AI_GUIDE_REASONING,
   })
-  await log(sequenceFields(profile), usage)
+  await log(sequenceFields(profile, input.kind), usage)
   const steps = Array.from({ length: input.steps }, (_, i) => {
     const step = value.passaggi[i]
-    return { text: clean(step?.frase ?? '').replace(/\.$/, ''), code: step && codes.includes(step.vignetta) ? step.vignetta : null }
+    const text = clean(step?.frase ?? '')
+    // Nella sequenza niente punto finale; nella storia le frasi restano frasi
+    return { text: input.kind === 'storia' ? text : text.replace(/\.$/, ''), code: step && codes.includes(step.vignetta) ? step.vignetta : null }
   })
   return { title: clean(value.titolo).replace(/\.$/, '').slice(0, 120), steps }
 }

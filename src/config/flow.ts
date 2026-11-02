@@ -24,6 +24,12 @@ export const FLOW_CONTEXTS: Record<FlowContext, { label: string; request: string
 
 export const SEQUENCE_LENGTHS: SequenceLength[] = [4, 6, 9, 12]
 
+/** Sequenza (routine a passaggi) o storia sociale (scene con frasi descrittive, prospettiche e di guida) */
+export type FlowKind = 'sequenza' | 'storia'
+
+/** Storia sociale: 4 o 6 scene */
+export const STORY_LENGTHS: SequenceLength[] = [4, 6]
+
 /** Limiti dei testi scritti nel flusso */
 export const FLOW_MAX = { goal: 600, situation: 1500 }
 
@@ -79,6 +85,8 @@ export interface SequenceInput {
   steps: SequenceLength
   context: FlowContext
   character: FlowCharacter
+  /** Assente = sequenza (richieste precedenti) */
+  kind?: FlowKind
 }
 
 export function isSequenceInput(value: unknown): value is SequenceInput {
@@ -93,19 +101,22 @@ export function isSequenceInput(value: unknown): value is SequenceInput {
     SEQUENCE_LENGTHS.includes(v.steps as SequenceLength) &&
     typeof v.context === 'string' &&
     v.context in FLOW_CONTEXTS &&
-    (v.character === 'bambina' || v.character === 'bambino')
+    (v.character === 'bambina' || v.character === 'bambino') &&
+    (v.kind === undefined || v.kind === 'sequenza' || (v.kind === 'storia' && STORY_LENGTHS.includes(v.steps as SequenceLength)))
   )
 }
 
 /** Testo esattamente come viene inviato all'AI (anteprima nell'app = contenuto della richiesta) */
 export function sequenceRequestText(input: SequenceInput, profile: ProfileLine[] = []): string {
+  const story = input.kind === 'storia'
   return [
+    story ? 'Tipo di materiale: storia sociale' : '',
     `Obiettivo: ${oneLine(input.goal)}`,
     `Situazione: ${input.situation.trim()}`,
     `Contesto: ${FLOW_CONTEXTS[input.context].request}`,
     `Fascia d'età: ${input.ageBand} anni`,
     `Comprensione: ${COMPREHENSIONS[input.comprehension].request}`,
-    `Numero di passaggi: ${input.steps}`,
+    story ? `Numero di scene: ${input.steps}` : `Numero di passaggi: ${input.steps}`,
     `Personaggio delle immagini: ${input.character} (frasi al ${input.character === 'bambina' ? 'femminile' : 'maschile'})`,
     profileRequestText(profile),
   ]
@@ -114,8 +125,18 @@ export function sequenceRequestText(input: SequenceInput, profile: ProfileLine[]
 }
 
 /** Nomi dei campi inviati, per il registro */
-export function sequenceFields(profile: ProfileLine[]): string[] {
-  return ['obiettivo', 'situazione', 'contesto', 'fascia_eta', 'comprensione', 'passaggi', 'personaggio', ...profileFields(profile)]
+export function sequenceFields(profile: ProfileLine[], kind: FlowKind = 'sequenza'): string[] {
+  return [
+    ...(kind === 'storia' ? ['tipo'] : []),
+    'obiettivo',
+    'situazione',
+    'contesto',
+    'fascia_eta',
+    'comprensione',
+    kind === 'storia' ? 'scene' : 'passaggi',
+    'personaggio',
+    ...profileFields(profile),
+  ]
 }
 
 /** Proposta dell'AI: titolo e un passaggio per riquadro (vignetta del catalogo o null) */
@@ -140,6 +161,36 @@ Regole fisse:
 - Nessuna diagnosi, nessun riferimento clinico, nessun nome di persona o luogo preciso.
 - Le voci del profilo marcate come ipotesi sono solo possibilità: non trattarle come fatti.
 - Usa gli interessi e i rinforzatori del profilo, se ci sono, solo quando aiutano davvero (es. l'ultimo passaggio).
+
+Vignette disponibili (codice: titolo, parole chiave):
+${catalog.join('\n')}`
+}
+
+// ——— Storia sociale ———
+
+/** Istruzioni fisse della storia sociale (stessa forma di risposta della sequenza: titolo e una frase per scena) */
+export function storyInstructions(catalog: string[]): string {
+  return `Sei un assistente per un'Educatrice Professionale Socio-Sanitaria che lavora con bambini di 3-8 anni (autismo, ADHD, disturbo oppositivo-provocatorio). Prepari la BOZZA di una storia sociale illustrata che lei rivedrà prima di usarla.
+
+Ricevi obiettivo, situazione, contesto, fascia d'età, livello di comprensione, numero di scene, personaggio ed eventuali voci del profilo del bambino.
+Restituisci:
+- titolo: breve, in prima persona, al massimo 6 parole (es. "Quando aspetto il mio turno").
+- passaggi: esattamente il numero di scene richiesto, in ordine. Ogni scena ha:
+  - frase: 1 o 2 frasi in prima persona, al presente, al femminile o al maschile secondo il personaggio. Con comprensione "soprattutto immagini" al massimo 6 parole; "frasi brevi" al massimo 12 parole; "frasi complete" al massimo 25 parole.
+  - vignetta: il codice della vignetta dell'elenco che rappresenta bene QUELLA scena, oppure "" se nessuna è adatta. Non usare una vignetta solo vagamente simile: meglio "".
+
+Struttura della storia (secondo il modello delle storie sociali):
+- Prima scena: descrive la situazione (dove, quando, chi c'è) in modo neutro.
+- Scene centrali: frasi descrittive e prospettiche (cosa succede, cosa possono pensare o provare gli altri, sempre come possibilità: "a volte", "forse", "può succedere"), poi frasi di guida su cosa posso provare a fare ("Posso…", "Provo a…"), mai "devo".
+- Almeno due frasi descrittive o prospettiche per ogni frase di guida.
+- Ultima scena: chiusura positiva e rassicurante (come mi sento dopo, chi è contento con me).
+
+Regole fisse:
+- Linguaggio positivo e rassicurante: cosa fare, non cosa evitare. Nessuna minaccia, punizione, privazione o giudizio sul bambino.
+- Le emozioni sono sempre possibilità, mai certezze.
+- Nessuna diagnosi, nessun riferimento clinico, nessun nome di persona o luogo preciso.
+- Le voci del profilo marcate come ipotesi sono solo possibilità: non trattarle come fatti.
+- Usa interessi e rinforzatori del profilo solo quando aiutano davvero.
 
 Vignette disponibili (codice: titolo, parole chiave):
 ${catalog.join('\n')}`

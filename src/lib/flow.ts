@@ -28,9 +28,10 @@ export function chosenProfileLines(entries: ProfileEntry[], ids: ReadonlySet<str
   )
 }
 
-/** Scheda Routine della misura scelta, con le frasi e le vignette della proposta (tutto modificabile) */
+/** Scheda Routine (o Storia sociale) della misura scelta, con le frasi e le vignette della proposta (tutto modificabile) */
 export function sheetFromProposal(proposal: SequenceProposal, input: SequenceInput, childName: string, uppercase: boolean): Sheet {
-  const sheet = createSheet(`routine-${input.steps}`, childName)
+  const story = input.kind === 'storia'
+  const sheet = createSheet(story ? (input.steps === 4 ? 'storia-4' : 'storia-6') : `routine-${input.steps}`, childName)
   return {
     ...sheet,
     character: input.character,
@@ -40,7 +41,7 @@ export function sheetFromProposal(proposal: SequenceProposal, input: SequenceInp
       return step ? { ...cell, code: step.code, text: step.text.trim() || null } : cell
     }),
     // Chi comprende soprattutto le immagini: solo vignette (le frasi restano salvate)
-    sequence: { ...sheet.sequence, show: input.comprehension === 'immagini' ? 'images' : 'both' },
+    sequence: { ...sheet.sequence, show: input.comprehension === 'immagini' && !story ? 'images' : 'both' },
     uppercase,
   }
 }

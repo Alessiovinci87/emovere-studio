@@ -11,6 +11,7 @@ import {
   FLOW_CONTEXTS,
   FLOW_MAX,
   SEQUENCE_LENGTHS,
+  STORY_LENGTHS,
   sequenceRequestText,
   type Comprehension,
   type FlowContext,
@@ -32,7 +33,7 @@ import type { Character, Folder, Scene, Sheet } from '../types'
 // Il materiale creato si collega da solo all'obiettivo scelto (un obiettivo nuovo si crea solo alla fine).
 
 type StepId = 'chi' | 'obiettivo' | 'situazione' | 'tipo' | 'parametri' | 'profilo' | 'proposta'
-type Kind = 'sequenza' | 'guida'
+type Kind = 'sequenza' | 'storia' | 'guida'
 type GoalChoice = { mode: 'existing'; id: string } | { mode: 'new' }
 
 interface Props {
@@ -56,7 +57,7 @@ interface Props {
 const KINDS: { id: Kind | 'storia' | 'scenario'; label: string; description: string; soon?: boolean }[] = [
   { id: 'sequenza', label: 'Sequenza o routine', description: 'Passaggi illustrati e numerati, da appendere o da riordinare.' },
   { id: 'guida', label: 'Guida per genitori e scuola', description: 'Bozza in 10 punti, versione famiglia e versione scuola.' },
-  { id: 'storia', label: 'Storia sociale', description: 'Una situazione raccontata in prima persona, scena per scena.', soon: true },
+  { id: 'storia', label: 'Storia sociale', description: 'Una situazione raccontata in prima persona, scena per scena, con le vignette.' },
   { id: 'scenario', label: 'Scenario comportamentale', description: 'Comportamento, alternativa e conseguenze, a confronto.', soon: true },
 ]
 
@@ -127,7 +128,18 @@ export function NewMaterialView(props: Props) {
           ? newGoal.title.trim()
           : ''
   const lines = detail ? chosenProfileLines(detail.profile, profileIds) : []
-  const sequenceInput: SequenceInput = { goal: goalTitle, situation, ageBand, comprehension, steps, context, character }
+  const visual = kind === 'sequenza' || kind === 'storia'
+  const lengths = kind === 'storia' ? STORY_LENGTHS : SEQUENCE_LENGTHS
+  const sequenceInput: SequenceInput = {
+    goal: goalTitle,
+    situation,
+    ageBand,
+    comprehension,
+    steps,
+    context,
+    character,
+    ...(kind === 'storia' ? { kind: 'storia' as const } : {}),
+  }
   const guideInput: GuideInput = { difficulty: situation.trim(), goal: goalTitle, situations: FLOW_CONTEXTS[context].request, ageBand, familyLanguage }
   const requestText = kind === 'guida' ? guideRequestText(guideInput, lines) : sequenceRequestText(sequenceInput, lines)
   const problems = identifyingProblems(requestText, names)
@@ -168,12 +180,12 @@ export function NewMaterialView(props: Props) {
 
   async function propose() {
     setStep('proposta')
-    if (kind === 'sequenza' && proposal && proposedFor.current === requestText) return
-    if (kind === 'sequenza' && proposal && !confirm('Hai cambiato i dati: preparo una proposta nuova al posto di quella attuale?')) return
+    if (visual && proposal && proposedFor.current === requestText) return
+    if (visual && proposal && !confirm('Hai cambiato i dati: preparo una proposta nuova al posto di quella attuale?')) return
     setBusy('proposta')
     setError(null)
     try {
-      if (kind === 'sequenza') {
+      if (visual) {
         setProposal(await flowApi.proposeSequence(sequenceInput, profileRequest))
         proposedFor.current = requestText
       } else {
@@ -414,7 +426,7 @@ export function NewMaterialView(props: Props) {
 
           {step === 'tipo' && (
             <>
-              <StepIntro title="Che materiale prepariamo?" text="Storie sociali e scenari arriveranno presto." />
+              <StepIntro title="Che materiale prepariamo?" text="Gli scenari comportamentali arriveranno presto." />
               <div role="radiogroup" aria-label="Tipo di materiale" className="grid gap-3 sm:grid-cols-2">
                 {KINDS.map((k) => (
                   <OptionCard
@@ -422,7 +434,10 @@ export function NewMaterialView(props: Props) {
                     selected={kind === k.id}
                     disabled={k.soon}
                     badge={k.soon ? 'In arrivo' : undefined}
-                    onSelect={() => setKind(k.id as Kind)}
+                    onSelect={() => {
+                      setKind(k.id as Kind)
+                      if (k.id === 'storia' && !STORY_LENGTHS.includes(steps)) setSteps(6)
+                    }}
                     title={k.label}
                     text={k.description}
                   />
@@ -436,11 +451,11 @@ export function NewMaterialView(props: Props) {
 
           {step === 'parametri' && (
             <>
-              <StepIntro title="Parametri" text={kind === 'guida' ? 'La guida è per gli adulti: famiglia e scuola.' : 'Come deve essere la sequenza.'} />
+              <StepIntro title="Parametri" text={kind === 'guida' ? 'La guida è per gli adulti: famiglia e scuola.' : kind === 'storia' ? 'Come deve essere la storia sociale.' : 'Come deve essere la sequenza.'} />
               <div className="flex flex-col gap-5 rounded-3xl bg-white p-5 shadow-sm">
                 <Choice label="Fascia d’età" value={ageBand} options={AGE_BANDS} onChange={(v) => setAgeBand(v)} />
                 {ageFromBirth && <p className="-mt-3 text-xs text-muted">Proposta dall’anno di nascita nel profilo.</p>}
-                {kind === 'sequenza' && (
+                {visual && (
                   <>
                     <Choice
                       label="Livello di comprensione"
@@ -455,7 +470,7 @@ export function NewMaterialView(props: Props) {
                     <Choice
                       label="Lunghezza"
                       value={String(steps)}
-                      options={Object.fromEntries(SEQUENCE_LENGTHS.map((n) => [String(n), `${n} passaggi`]))}
+                      options={Object.fromEntries(lengths.map((n) => [String(n), kind === 'storia' ? `${n} scene` : `${n} passaggi`]))}
                       onChange={(v) => setSteps(Number(v) as SequenceLength)}
                     />
                     <div className="flex flex-col gap-1.5">
@@ -492,7 +507,7 @@ export function NewMaterialView(props: Props) {
                 <h3 className="font-bold">Cosa viene inviato all’AI</h3>
                 <p className="whitespace-pre-wrap rounded-2xl bg-cream p-4 text-sm leading-relaxed">{requestText}</p>
                 <p className="text-xs text-muted">
-                  Solo questo testo, con le regole fisse{kind === 'sequenza' ? ' e l’elenco delle vignette della libreria' : ' della guida'}. Nessun nome, nessun
+                  Solo questo testo, con le regole fisse{visual ? ' e l’elenco delle vignette della libreria' : ' della guida'}. Nessun nome, nessun
                   dato identificativo.
                 </p>
               </section>
@@ -518,9 +533,16 @@ export function NewMaterialView(props: Props) {
                   )}
                 </div>
               )}
-              {kind === 'sequenza' && proposal && (
+              {visual && proposal && (
                 <>
-                  <StepIntro title="La proposta" text="Una bozza: correggi frasi, ordine e vignette. Poi “Crea e apri” prepara la scheda." />
+                  <StepIntro
+                    title="La proposta"
+                    text={
+                      kind === 'storia'
+                        ? 'Una bozza di storia sociale: correggi frasi, ordine e vignette. Poi “Crea e apri” prepara la scheda Storia sociale.'
+                        : 'Una bozza: correggi frasi, ordine e vignette. Poi “Crea e apri” prepara la scheda.'
+                    }
+                  />
                   <SequenceProposalEditor proposal={proposal} character={character} onChange={setProposal} onAiScene={props.onAiScene} />
                 </>
               )}
@@ -534,7 +556,7 @@ export function NewMaterialView(props: Props) {
           Indietro
         </Button>
         {step === 'proposta' ? (
-          kind === 'sequenza' && proposal ? (
+          visual && proposal ? (
             <div className="flex flex-wrap justify-end gap-2">
               <Button
                 disabled={busy !== null}
