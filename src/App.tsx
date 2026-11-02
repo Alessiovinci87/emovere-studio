@@ -32,6 +32,7 @@ import { visibleIndexes } from './components/SheetView'
 import { CreateView, type CreateChoice } from './views/CreateView'
 import { SettingsView } from './views/SettingsView'
 import { GuideScreen } from './views/GuideEditor'
+import { ChildModeView } from './views/ChildModeView'
 import { TodayView } from './views/TodayView'
 import { TrashView } from './views/TrashView'
 import { ChildView } from './views/ChildView'
@@ -556,6 +557,15 @@ Non si può annullare.`)) return
           }}
           onAiScene={(scene) => applyAiScenes([...aiScenes, scene])}
         />
+      ) : route.name === 'usa' ? (
+        (() => {
+          const sheet = data.sheets.find((x) => x.id === route.id)
+          return sheet ? (
+            <ChildModeView sheet={sheet} onClose={() => back({ name: 'scheda', id: sheet.id })} />
+          ) : (
+            <Missing text="Questa scheda non esiste più." onBack={() => navigate({ name: 'oggi' })} />
+          )
+        })()
       ) : route.name === 'guida' ? (
         <GuideScreen
           id={route.id}
@@ -583,6 +593,7 @@ Non si può annullare.`)) return
             onSave={() => setFolderAction({ mode: 'save' })}
             onOpenFolder={openFolder}
             onNew={() => navigate({ name: 'crea', folderId: editing.folderId ?? undefined })}
+            onPlay={() => navigate({ name: 'usa', id: editing.id })}
             onClose={() => back(editingFolder ? { name: 'cartella', id: editingFolder.id } : { name: 'oggi' })}
           />
         ) : (
@@ -718,13 +729,13 @@ Non si può annullare.`)) return
         />
       )}
 
-      <NotesButton
+      {route.name !== 'usa' && <NotesButton
         key={noteWhere.screen}
         screen={noteWhere.screen}
         context={[noteWhere.context, noteDetail].filter(Boolean).join(' · ')}
         isOwner={isOwner}
         onOpenAll={route.name === 'impostazioni' ? undefined : () => navigate({ name: 'impostazioni' })}
-      />
+      />}
 
       {toast && (
         <div

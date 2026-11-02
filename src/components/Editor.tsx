@@ -1,3 +1,4 @@
+import { canUseOnTablet } from '../views/ChildModeView'
 import { useNoteDetail } from '../lib/appNotes'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { CARD_LABEL, cardMetrics, sheetCards, type CardSize } from './Cards'
@@ -42,6 +43,8 @@ interface Props {
   onSave: () => void
   onOpenFolder: (id: string) => void
   onNew: () => void
+  /** Modalità bambino: la scheda sul tablet */
+  onPlay: () => void
   onClose: () => void
 }
 
@@ -59,6 +62,7 @@ export function Editor({
   onSave,
   onOpenFolder,
   onNew,
+  onPlay,
   onClose,
 }: Props) {
   useNoteDetail(templates[sheet.template].label)
@@ -133,6 +137,16 @@ export function Editor({
           <Button tone="primary" onClick={onSave} className="hidden shrink-0 sm:block">
             Metti in una cartella
           </Button>
+        )}
+
+        {canUseOnTablet(sheet) && (
+          <button
+            onClick={onPlay}
+            title="Usa la scheda sul tablet con il bambino: un passo alla volta, con voce e tempo"
+            className="flex h-11 shrink-0 items-center gap-1 rounded-full px-3 font-bold text-accent transition hover:bg-accent-soft"
+          >
+            ▶<span className="hidden lg:inline">Usa sul tablet</span>
+          </button>
         )}
 
         <ExportMenu
